@@ -977,7 +977,7 @@ Qed.
 Inductive extcall_malloc_sem (ge: Senv.t):
               list val -> mem -> trace -> val -> mem -> Prop :=
   | extcall_malloc_sem_intro: forall sz m m' b m'',
-      Mem.alloc m (- size_chunk Mptr) (Ptrofs.unsigned sz) = (m', b) ->
+      Mem.alloc false m (- size_chunk Mptr) (Ptrofs.unsigned sz) = (m', b) ->
       Mem.store Mptr m' b (- size_chunk Mptr) (Vptrofs sz) = Some m'' ->
       extcall_malloc_sem ge (Vptrofs sz :: nil) m E0 (Vptr b Ptrofs.zero) m''.
 
@@ -987,7 +987,7 @@ Lemma extcall_malloc_ok:
 Proof.
   assert (UNCHANGED:
     forall (P: block -> Z -> Prop) m lo hi v m' b m'',
-    Mem.alloc m lo hi = (m', b) ->
+    Mem.alloc false m lo hi = (m', b) ->
     Mem.store Mptr m' b lo v = Some m'' ->
     Mem.unchanged_on P m m'').
   {

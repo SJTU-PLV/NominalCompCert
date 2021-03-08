@@ -445,7 +445,7 @@ Definition do_ef_malloc
   match vargs with
   | v :: nil =>
       do sz <- do_alloc_size v;
-      let (m', b) := Mem.alloc m (- size_chunk Mptr) (Ptrofs.unsigned sz) in
+      let (m', b) := Mem.alloc false m (- size_chunk Mptr) (Ptrofs.unsigned sz) in
       do m'' <- Mem.store Mptr m' b (- size_chunk Mptr) v;
       Some(w, E0, Vptr b Ptrofs.zero, m'')
   | _ => None
@@ -582,7 +582,7 @@ Proof with try congruence.
   exploit do_volatile_store_sound; eauto. intuition. econstructor; eauto.
 - (* EF_malloc *)
   unfold do_ef_malloc. destruct vargs... destruct vargs... mydestr.
-  destruct (Mem.alloc m (- size_chunk Mptr) (Ptrofs.unsigned i)) as [m1 b] eqn:?. mydestr.
+  destruct (Mem.alloc false m (- size_chunk Mptr) (Ptrofs.unsigned i)) as [m1 b] eqn:?. mydestr.
   split. apply SIZE in Heqo. subst v. econstructor; eauto. constructor.
 - (* EF_free *)
   unfold do_ef_free. destruct vargs... destruct v... 
@@ -1899,7 +1899,7 @@ Fixpoint do_alloc_variables (e: env) (m: mem) (l: list (ident * type)) {struct l
   match l with
   | nil => (e,m)
   | (id, ty) :: l' =>
-      let (m1,b1) := Mem.alloc m 0 (sizeof ge ty) in
+      let (m1,b1) := Mem.alloc true m 0 (sizeof ge ty) in
       do_alloc_variables (PTree.set id (b1, ty) e) m1 l'
 end.
 
@@ -1908,7 +1908,7 @@ Lemma do_alloc_variables_sound:
 Proof.
   induction l; intros; simpl.
   constructor.
-  destruct a as [id ty]. destruct (Mem.alloc m 0 (sizeof ge ty)) as [m1 b1] eqn:?; simpl.
+  destruct a as [id ty].  destruct (Mem.alloc true m 0 (sizeof ge ty)) as [m1 b1] eqn:?; simpl.
   econstructor; eauto.
 Qed.
 

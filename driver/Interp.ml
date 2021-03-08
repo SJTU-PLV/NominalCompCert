@@ -141,18 +141,30 @@ let print_state p (prog, ge, s) =
       fprintf p "stuck after an undefined expression"
 
 (* Comparing memory states and support *)
-let rank_sup = function
+
+let take_pos = function
+  | Stack i -> i
+  | Other i -> i
+
+let rank_list = function
   | [] -> 0
   | _::_ -> 1
 
-let rec compare_sup s1 s2 =
+let rec compare_list_block s1 s2 =
   if s1 = s2 then 0 else
   match s1,s2 with
   | [],[] -> 0
   | (h1::t1),(h2::t2)  ->
-    let c = P.compare h1 h2 in
-    if c<>0 then c else compare_sup t1 t2
-  | _,_ -> compare (rank_sup s1) (rank_sup s2)
+    let p1 = take_pos h1 in let p2 = take_pos h2 in
+    let c = P.compare p1 p2 in
+    if c<>0 then c else compare_list_block t1 t2
+  | _,_ -> compare (rank_list s1) (rank_list s2)
+
+let compare_sup s1 s2 =
+  let s11 = s1.Mem.stack in let s12 = s1.Mem.other in
+  let s21 = s2.Mem.stack in let s22 = s2.Mem.other in
+      let c = compare_list_block s11 s12 in
+        if c <> 0 then c else compare_list_block s21 s22
 
 let compare_mem m1 m2 =
   (* assumes nextblocks were already compared equal *)
@@ -328,7 +340,7 @@ let format_value m flags length conv arg =
   | 's', "", _ ->
       "<pointer argument expected>"
   | 'p', "", Vptr(blk, ofs) ->
-      Printf.sprintf "<%ld%+ld>" (P.to_int32 blk) (camlint_of_coqint ofs)
+      Printf.sprintf "<%ld%+ld>" (P.to_int32 (take_pos blk)) (camlint_of_coqint ofs)
   | 'p', "", Vint i ->
       format_int32 (flags ^ "x") (camlint_of_coqint i)
   | 'p', "", _ ->

@@ -49,10 +49,29 @@ Definition lookup_composite (ce: composite_env) (id: ident) : res composite :=
   | None => Error (MSG "Undefined struct or union " :: CTX id :: nil)
   end.
 
-Parameter ident_to_block : ident -> block.
-Parameter block_to_ident : block -> ident.
-Axiom ident_to_block_to_ident : forall id , block_to_ident(ident_to_block id) = id. 
-Axiom block_to_ident_to_block : forall b  , ident_to_block(block_to_ident b ) = b.
+Definition ident_to_block (i:ident) :=
+  match i with
+    |xO i' => Other i'
+    |xI i' => Stack (Pos.succ i')
+    |xH => Stack xH
+  end.
+Definition block_to_ident (b:block ) :=
+  match b with
+    | Stack i => Pos.pred (xO i)
+    | Other i => (xO i)
+  end.
+
+Theorem ident_to_block_to_ident : forall id , block_to_ident(ident_to_block id) = id.
+Proof.
+  intros. destruct id. simpl. apply Pos.pred_double_succ.
+  auto. auto.
+Qed.
+Theorem block_to_ident_to_block : forall b  , ident_to_block(block_to_ident b ) = b.
+Proof.
+  intros. destruct b. simpl. unfold ident_to_block. destruct p.
+  auto. simpl. rewrite Pos.succ_pred_double. auto. auto.
+  auto.
+Qed.
 
 Fixpoint constval (ce: composite_env) (a: expr) : res val :=
   match a with

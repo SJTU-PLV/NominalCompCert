@@ -420,12 +420,12 @@ Definition expand_cfg_rec (ctx: context) (f: function): mon unit :=
   ptree_mfold (expand_instr ctx) f.(fn_code).
 
 End EXPAND_CFG.
-
+Print expand_cfg_rec.
 (** Here we "tie the knot" of the recursion, taking the fixpoint
   of [expand_cfg_rec]. *)
 
 Definition expand_cfg := Fixm size_fenv expand_cfg_rec.
-
+Print expand_cfg.
 (** Start of the recursion: copy and inline function [f] in the
   initial context. *)
 

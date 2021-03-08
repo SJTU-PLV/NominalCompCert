@@ -960,10 +960,10 @@ Ltac UseTransfer :=
   intros (tbytes & P & Q).
   exploit magree_storebytes_parallel.
   eapply magree_monotone. eexact D2.
-  instantiate (1 := nlive ge (fresh_block sps) (nmem_remove nm adst sz)).
+  instantiate (1 := nlive ge (fresh_block true sps) (nmem_remove nm adst sz)).
   intros. apply incl_nmem_add; auto.
   eauto.
-  instantiate (1 := nlive ge (fresh_block sps) nm).
+  instantiate (1 := nlive ge (fresh_block true sps) nm).
   intros. eapply nlive_remove; eauto.
   unfold adst, vanalyze; rewrite AN; eapply aaddr_arg_sound_1; eauto.
   erewrite Mem.loadbytes_length in H1 by eauto.

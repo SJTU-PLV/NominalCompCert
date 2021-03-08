@@ -366,7 +366,7 @@ Inductive match_states: state -> state -> Prop :=
             .
      State stk f (return instr)         ~~  Returnstate stk' res'
 >>
-  To preserve non-terminating behaviors, we need to make sure
+a  To preserve non-terminating behaviors, we need to make sure
   that the execution of this sequence in the original code cannot
   diverge.  For this, we introduce the following complicated
   measure over states, which will decrease strictly whenever

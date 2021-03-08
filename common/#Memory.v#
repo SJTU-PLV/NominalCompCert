@@ -660,7 +660,7 @@ Qed.
 (** Freeing a block between the given bounds.
   Return the updated memory state where the given range of the given block
   has been invalidated: future reads and writes to this
-  range will fail.  Requires freeable permission on the given range. *)
+  range will fail. Requires freeable permission on the given range. *)
 
 Program Definition unchecked_free (m: mem) (b: block) (lo hi: Z): mem :=
   mkmem m.(mem_contents)

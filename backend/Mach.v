@@ -398,7 +398,7 @@ Inductive step: state -> trace -> state -> Prop :=
   | exec_function_internal:
       forall s fb rs m f m1 m2 m3 stk rs',
       Genv.find_funct_ptr ge fb = Some (Internal f) ->
-      Mem.alloc m 0 f.(fn_stacksize) = (m1, stk) ->
+      Mem.alloc true m 0 f.(fn_stacksize) = (m1, stk) ->
       let sp := Vptr stk Ptrofs.zero in
       store_stack m1 sp Tptr f.(fn_link_ofs) (parent_sp s) = Some m2 ->
       store_stack m2 sp Tptr f.(fn_retaddr_ofs) (parent_ra s) = Some m3 ->

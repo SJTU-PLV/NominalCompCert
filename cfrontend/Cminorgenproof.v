@@ -199,7 +199,7 @@ Record match_env (f: meminj) (cenv: compilenv)
   mk_match_env {
 
     me_sps:
-      sp = fresh_block sps;
+      sp = fresh_block true sps;
 
     me_sup_include:
       Mem.sup_include bes es;
@@ -291,7 +291,7 @@ Qed.
 Lemma match_env_alloc:
   forall f1 id cenv e sp sps bes m1 sz m2 b ofs f2,
   match_env f1 (PTree.remove id cenv) e sp sps bes (Mem.support m1) ->
-  Mem.alloc m1 0 sz = (m2, b) ->
+  Mem.alloc true m1 0 sz = (m2, b) ->
   cenv!id = Some ofs ->
   inject_incr f1 f2 ->
   f2 b = Some(sp, ofs) ->
@@ -319,13 +319,13 @@ Proof.
   constructor.
 
 (* bounded *)
-  intros. rewrite PTree.gsspec in H. destruct (peq id0 id).
+  intros. rewrite PTree.gsspec in H. destruct (peq id0 id). unfold Mem.nextblock in H.
   inv H. rewrite SUPPORT. split. apply Mem.sup_add_in1. auto.
   intro.  eapply freshness; eauto.
   exploit me_bounded0; eauto. rewrite SUPPORT. intros [A B].
   split. apply Mem.sup_add_in2. auto. auto.
 (* inv *)
-  intros. destruct (eq_block b (Mem.nextblock m1)).
+  intros. destruct (eq_block b (Mem.nextblock true m1)).
   subst b. rewrite SAME in H; inv H. exists id; exists sz. apply PTree.gss.
   rewrite OTHER in H; auto. exploit me_inv0; eauto.
   intros [id1 [sz1 EQ]]. exists id1; exists sz1. rewrite PTree.gso; auto. congruence.
@@ -591,7 +591,7 @@ Lemma match_callstack_freelist:
   /\ Mem.inject f m' tm'.
 Proof.
   intros until tm; intros INJ FREELIST MCS. inv MCS. inv MENV.
-  assert ({tm' | Mem.free tm (fresh_block sps) 0 (fn_stackspace tf) = Some tm'}).
+  assert ({tm' | Mem.free tm (fresh_block true sps) 0 (fn_stackspace tf) = Some tm'}).
   apply Mem.range_perm_free.
   red; intros.
   exploit PERM; eauto. intros [A | A].
@@ -687,7 +687,7 @@ Qed.
 Lemma match_callstack_alloc_right:
   forall f m tm cs tf tm' sp le te cenv,
   match_callstack f m tm cs (Mem.support m) (Mem.support tm) ->
-  Mem.alloc tm 0 tf.(fn_stackspace) = (tm', sp) ->
+  Mem.alloc true tm 0 tf.(fn_stackspace) = (tm', sp) ->
   Mem.inject f m tm ->
   match_temps f le te ->
   (forall id, cenv!id = None) ->
@@ -716,11 +716,11 @@ Qed.
 
 Lemma match_callstack_alloc_left:
   forall f1 m1 tm id cenv tf e le te sp sps bes cs sz m2 b f2 ofs,
-  sp = fresh_block sps ->
+  sp = fresh_block true sps ->
   match_callstack f1 m1 tm
     (Frame (PTree.remove id cenv) tf e le te sp sps bes (Mem.support m1) :: cs)
     (Mem.support m1) (Mem.support tm) ->
-  Mem.alloc m1 0 sz = (m2, b) ->
+  Mem.alloc true m1 0 sz = (m2, b) ->
   cenv!id = Some ofs ->
   inject_incr f1 f2 ->
   f2 b = Some(sp, ofs) ->
@@ -749,9 +749,9 @@ Proof.
   eapply match_callstack_invariant with (m1 := m1); eauto.
   intros. eapply Mem.perm_alloc_4; eauto.
   intro. subst b0. eapply freshness; eauto. eapply LO.
-  rewrite RES in H. auto.
+  rewrite RES in H. eauto.
   intros. apply H5. intro. eapply freshness. eapply LO.
-  subst b0. subst b. auto.
+  subst b0. subst b. eauto.
   intros. destruct (eq_block b0 b).
   subst b0. rewrite H4 in H. inv H. apply freshness in H0. destruct H0.
   rewrite H5 in H; auto.
@@ -811,7 +811,7 @@ Definition cenv_mem_separated (cenv: compilenv) (vars: list (ident * Z)) (f: mem
 
 Lemma match_callstack_alloc_variables_rec:
   forall tm sp sps tf cenv le te bes cs,
-  sp = fresh_block sps ->
+  sp = fresh_block true sps ->
   Mem.valid_block tm sp ->
   fn_stackspace tf <= Ptrofs.max_unsigned ->
   (forall ofs k p, Mem.perm tm sp ofs k p -> 0 <= ofs < fn_stackspace tf) ->
@@ -837,7 +837,7 @@ Proof.
   intros until cs; intros SPS VALID REPRES STKSIZE STKPERMS.
   induction 1; intros f1 NOREPET COMPAT SEP1 SEP2 UNBOUND MCS MINJ.
   (* base case *)
-  simpl in MCS. exists f1; auto.
+  simpl in MCS. exists f1. auto.
   (* inductive case *)
   simpl in NOREPET. inv NOREPET.
 (* exploit Mem.alloc_result; eauto. intros RES.
@@ -865,14 +865,14 @@ Proof.
     rewrite D in H5; eauto. eauto. auto.
     intros. rewrite PTree.gso. eapply UNBOUND; eauto with coqlib.
     red; intros; subst id0. elim H3. change id with (fst (id, sz0)). apply in_map; auto.
-    eapply match_callstack_alloc_left; eauto.
+    eapply match_callstack_alloc_left; eauto. 
     rewrite cenv_remove_gso; auto.
     apply UNBOUND with sz; auto with coqlib.
 Qed.
 
 Lemma match_callstack_alloc_variables:
   forall tm1 sp tm2 m1 vars e m2 cenv f1 cs fn le te,
-  Mem.alloc tm1 0 (fn_stackspace fn) = (tm2, sp) ->
+  Mem.alloc true tm1 0 (fn_stackspace fn) = (tm2, sp) ->
   fn_stackspace fn <= Ptrofs.max_unsigned ->
   alloc_variables empty_env m1 vars e m2 ->
   list_norepet (map fst vars) ->
@@ -1252,7 +1252,7 @@ Theorem match_callstack_function_entry:
   alloc_variables Csharpminor.empty_env m (Csharpminor.fn_vars fn) e m' ->
   bind_parameters (Csharpminor.fn_params fn) args (create_undef_temps fn.(fn_temps)) = Some le ->
   Val.inject_list f args targs ->
-  Mem.alloc tm 0 tf.(fn_stackspace) = (tm', sp) ->
+  Mem.alloc true tm 0 tf.(fn_stackspace) = (tm', sp) ->
   match_callstack f m tm cs (Mem.support m) (Mem.support tm) ->
   Mem.inject f m tm ->
   let te := set_locals (Csharpminor.fn_temps fn) (set_params targs (Csharpminor.fn_params fn)) in
@@ -1598,7 +1598,7 @@ Inductive match_cont: Csharpminor.cont -> Cminor.cont -> compilenv -> exit_env -
   | match_Kcall: forall optid fn e le k tfn sp sps te tk cenv xenv bes es cs sz cenv',
       transl_funbody cenv sz fn = OK tfn ->
       match_cont k tk cenv xenv cs ->
-      sp = fresh_block sps ->
+      sp = fresh_block true sps ->
       match_cont (Csharpminor.Kcall optid fn e le k)
                  (Kcall optid tfn (Vptr sp Ptrofs.zero) te tk)
                  cenv' nil
@@ -1607,7 +1607,7 @@ Inductive match_cont: Csharpminor.cont -> Cminor.cont -> compilenv -> exit_env -
 Inductive match_states: Csharpminor.state -> Cminor.state -> Prop :=
   | match_state:
       forall fn s k e le m tfn ts tk sp sps te tm cenv xenv f bes es cs sz
-      (SPS: sp = fresh_block sps)
+      (SPS: sp = fresh_block true sps)
       (TRF: transl_funbody cenv sz fn = OK tfn)
       (TR: transl_stmt cenv xenv s = OK ts)
       (MINJ: Mem.inject f m tm)
@@ -1619,7 +1619,7 @@ Inductive match_states: Csharpminor.state -> Cminor.state -> Prop :=
                    (State tfn ts tk (Vptr sp Ptrofs.zero) te tm)
   | match_state_seq:
       forall fn s1 s2 k e le m tfn ts1 tk sp sps te tm cenv xenv f bes es cs sz
-      (SPS: sp = fresh_block sps)
+      (SPS: sp = fresh_block true sps)
       (TRF: transl_funbody cenv sz fn = OK tfn)
       (TR: transl_stmt cenv xenv s1 = OK ts1)
       (MINJ: Mem.inject f m tm)
@@ -1813,7 +1813,7 @@ Qed.
 
 Lemma switch_match_states:
   forall fn k e le m tfn ts tk sp sps te tm cenv xenv f bes es cs sz ls body tk'
-    (SPS: sp = fresh_block sps)
+    (SPS: sp = fresh_block true sps)
     (TRF: transl_funbody cenv sz fn = OK tfn)
     (TR: transl_lblstmt cenv (switch_env ls xenv) ls body = OK ts)
     (MINJ: Mem.inject f m tm)
@@ -2058,7 +2058,7 @@ Proof.
   apply plus_one. econstructor. eauto.
   eapply external_call_symbols_preserved; eauto. apply senv_preserved.
   assert (MCS': match_callstack f' m' tm'
-                 (Frame cenv tfn e le te (fresh_block sps) sps bes es :: cs)
+                 (Frame cenv tfn e le te (fresh_block true sps) sps bes es :: cs)
                  (Mem.support m') (Mem.support tm')).
     apply match_callstack_incr_bound with (Mem.support m) (Mem.support tm).
     eapply match_callstack_external_call; eauto.
@@ -2085,7 +2085,7 @@ Opaque PTree.set.
 (* ifthenelse *)
   monadInv TR.
   exploit transl_expr_correct; eauto. intros [tv [EVAL VINJ]].
-  left; exists (State tfn (if b then x0 else x1) tk (Vptr (fresh_block sps) Ptrofs.zero) te tm); split.
+  left; exists (State tfn (if b then x0 else x1) tk (Vptr (fresh_block true sps) Ptrofs.zero) te tm); split.
   apply plus_one. eapply step_ifthenelse; eauto. eapply bool_of_val_inject; eauto.
   econstructor; eauto. destruct b; auto.
 
@@ -2195,7 +2195,7 @@ Opaque PTree.set.
                         (Csharpminor.fn_temps f)
                         sz
                         x0) in *.
-  caseEq (Mem.alloc tm 0 (fn_stackspace tf)). intros tm' sp ALLOC'.
+  caseEq (Mem.alloc true tm 0 (fn_stackspace tf)). intros tm' sp ALLOC'.
   exploit match_callstack_function_entry; eauto. simpl; eauto. simpl; auto.
   intros [f2 [MCS2 MINJ2]].
   left; econstructor; split.

@@ -533,7 +533,7 @@ Inductive step: state -> trace -> state -> Prop :=
         E0 (State f s' k' sp e m)
 
   | step_internal_function: forall f vargs k m m' sp e,
-      Mem.alloc m 0 f.(fn_stackspace) = (m', sp) ->
+      Mem.alloc true m 0 f.(fn_stackspace) = (m', sp) ->
       set_locals f.(fn_vars) (set_params vargs f.(fn_params)) = e ->
       step (Callstate (Internal f) vargs k m)
         E0 (State f f.(fn_body) k (Vptr sp Ptrofs.zero) e m')
@@ -720,7 +720,7 @@ Inductive eval_funcall:
         mem -> val -> Prop :=
   | eval_funcall_internal:
       forall m f vargs m1 sp e t e2 m2 out vres m3,
-      Mem.alloc m 0 f.(fn_stackspace) = (m1, sp) ->
+      Mem.alloc true m 0 f.(fn_stackspace) = (m1, sp) ->
       set_locals f.(fn_vars) (set_params vargs f.(fn_params)) = e ->
       exec_stmt f (Vptr sp Ptrofs.zero) e m1 f.(fn_body) t e2 m2 out ->
       outcome_result_value out vres ->
@@ -845,7 +845,7 @@ CoInductive evalinf_funcall:
         mem -> fundef -> list val -> traceinf -> Prop :=
   | evalinf_funcall_internal:
       forall m f vargs m1 sp e t,
-      Mem.alloc m 0 f.(fn_stackspace) = (m1, sp) ->
+      Mem.alloc true m 0 f.(fn_stackspace) = (m1, sp) ->
       set_locals f.(fn_vars) (set_params vargs f.(fn_params)) = e ->
       execinf_stmt f (Vptr sp Ptrofs.zero) e m1 f.(fn_body) t ->
       evalinf_funcall m (Internal f) vargs t

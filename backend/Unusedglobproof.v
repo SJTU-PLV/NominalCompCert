@@ -686,14 +686,14 @@ Inductive match_stacks (j: meminj):
       Mem.sup_include (Genv.genv_sup tge) tbound ->
       match_stacks j nil nil bound tbound
   | match_stacks_cons: forall res f sps sp pc rs s tsps tsp trs ts bound tbound
-         (SPS: sp = fresh_block sps)
-         (TSPS: tsp = fresh_block tsps)
+         (SPS: sp = fresh_block true sps)
+         (TSPS: tsp = fresh_block true tsps)
          (STACKS: match_stacks j s ts sps tsps)
          (KEPT: forall id, ref_function f id -> kept id)
          (SPINJ: j sp = Some(tsp, 0))
          (REGINJ: regset_inject j rs trs)
-         (BELOW: Mem.sup_include (sup_incr sps) bound)
-         (TBELOW: Mem.sup_include (sup_incr tsps) tbound),
+         (BELOW: Mem.sup_include (sup_incr true sps) bound)
+         (TBELOW: Mem.sup_include (sup_incr true tsps) tbound),
       match_stacks j (Stackframe res f (Vptr sp Ptrofs.zero) pc rs :: s)
                      (Stackframe res f (Vptr tsp Ptrofs.zero) pc trs :: ts)
                      bound tbound.
@@ -758,8 +758,8 @@ Qed.
 
 Inductive match_states: state -> state -> Prop :=
   | match_states_regular: forall s f sp sps pc rs m ts tsp tsps trs tm j
-         (SPS: sp = fresh_block sps)
-         (TSPS: tsp = fresh_block tsps)
+         (SPS: sp = fresh_block true sps)
+         (TSPS: tsp = fresh_block true tsps)
          (STACKS: match_stacks j s ts sps tsps)
          (KEPT: forall id, ref_function f id -> kept id)
          (SPINJ: j sp = Some(tsp, 0))
@@ -901,9 +901,9 @@ Proof.
 
 - (* op *)
   assert (A: exists tv,
-               eval_operation tge (Vptr (fresh_block tsps) Ptrofs.zero) op trs##args tm = Some tv
+               eval_operation tge (Vptr (fresh_block true tsps) Ptrofs.zero) op trs##args tm = Some tv
             /\ Val.inject j v tv).
-  { apply eval_operation_inj with (ge1 := ge) (m1 := m) (sp1 := Vptr (fresh_block sps) Ptrofs.zero) (vl1 := rs##args).
+  { apply eval_operation_inj with (ge1 := ge) (m1 := m) (sp1 := Vptr (fresh_block true sps) Ptrofs.zero) (vl1 := rs##args).
     intros; eapply Mem.valid_pointer_inject_val; eauto.
     intros; eapply Mem.weak_valid_pointer_inject_val; eauto.
     intros; eapply Mem.weak_valid_pointer_inject_no_overflow; eauto.
@@ -919,9 +919,9 @@ Proof.
 
 - (* load *)
   assert (A: exists ta,
-               eval_addressing tge (Vptr (fresh_block tsps) Ptrofs.zero) addr trs##args = Some ta
+               eval_addressing tge (Vptr (fresh_block true tsps) Ptrofs.zero) addr trs##args = Some ta
             /\ Val.inject j a ta).
-  { apply eval_addressing_inj with (ge1 := ge) (sp1 := Vptr (fresh_block sps) Ptrofs.zero) (vl1 := rs##args).
+  { apply eval_addressing_inj with (ge1 := ge) (sp1 := Vptr (fresh_block true sps) Ptrofs.zero) (vl1 := rs##args).
     intros. apply symbol_address_inject. eapply match_stacks_preserves_globals; eauto.
     apply KEPT. red. exists pc, (Iload chunk addr args dst pc'); auto.
     econstructor; eauto.
@@ -934,9 +934,9 @@ Proof.
 
 - (* store *)
   assert (A: exists ta,
-               eval_addressing tge (Vptr (fresh_block tsps) Ptrofs.zero) addr trs##args = Some ta
+               eval_addressing tge (Vptr (fresh_block true tsps) Ptrofs.zero) addr trs##args = Some ta
             /\ Val.inject j a ta).
-  { apply eval_addressing_inj with (ge1 := ge) (sp1 := Vptr (fresh_block sps) Ptrofs.zero) (vl1 := rs##args).
+  { apply eval_addressing_inj with (ge1 := ge) (sp1 := Vptr (fresh_block true sps) Ptrofs.zero) (vl1 := rs##args).
     intros. apply symbol_address_inject. eapply match_stacks_preserves_globals; eauto.
     apply KEPT. red. exists pc, (Istore chunk addr args src pc'); auto.
     econstructor; eauto.
@@ -1021,8 +1021,8 @@ Proof.
 - (* internal function *)
   exploit Mem.alloc_parallel_inject. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros (j' & tm' & tstk & C & D & E & F & G).
-  assert (STK: stk = Mem.nextblock m) by (eapply Mem.alloc_result; eauto).
-  assert (TSTK: tstk = Mem.nextblock tm) by (eapply Mem.alloc_result; eauto).
+  assert (STK: stk = Mem.nextblock true m) by (eapply Mem.alloc_result; eauto).
+  assert (TSTK: tstk = Mem.nextblock true tm) by (eapply Mem.alloc_result; eauto).
   assert (STACKS': match_stacks j' s ts (Mem.support m) (Mem.support tm)).
   {
     apply match_stacks_incr with j; auto.
@@ -1033,8 +1033,8 @@ Proof.
   eapply exec_function_internal; eauto.
   eapply match_states_regular with (j := j'); eauto.
   apply init_regs_inject; auto. apply val_inject_list_incr with j; auto.
-  rewrite Mem.support_alloc with m 0 (fn_stacksize f) m' stk. apply Mem.sup_add_in2. auto. auto.
-  rewrite Mem.support_alloc with tm 0 (fn_stacksize f) tm' tstk. apply Mem.sup_add_in2. auto.
+  rewrite Mem.support_alloc with m 0 (fn_stacksize f) m' stk true. apply Mem.sup_add_in2. auto. auto.
+  rewrite Mem.support_alloc with tm 0 (fn_stacksize f) tm' tstk true. apply Mem.sup_add_in2. auto.
 
 - (* external function *)
   exploit external_call_inject; eauto.

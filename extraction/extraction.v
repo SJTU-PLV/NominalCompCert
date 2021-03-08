@@ -126,9 +126,10 @@ Extract Constant Compiler.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".
 Extract Constant Compiler.time  => "Timing.time_coq".
 
 (* Initializers *)
-
+(*
 Extract Constant Initializers.ident_to_block => "(fun x -> x)".
 Extract Constant Initializers.block_to_ident => "(fun x -> x)".
+*)
 
 (*Extraction Inline Compiler.apply_total Compiler.apply_partial.*)
 
