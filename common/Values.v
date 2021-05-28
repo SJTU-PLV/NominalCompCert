@@ -27,14 +27,9 @@ Parameter eq_block : forall (x y:block),{x=y}+{x<>y}.
 
 End BLOCK.
 
-(* Declare Module Block : BLOCK. *)
+(*Declare Module Block : BLOCK.*)
 
-(*
-Module Block <: BLOCK.
-Definition block := positive.
-Definition eq_block := peq.
-End Block.
-*)
+
 Inductive block' :=
   |Stack : positive -> block'
   |Other : positive -> block'.
@@ -47,13 +42,6 @@ Theorem eq_block : forall (x y:block),{x=y}+{x<>y}.
 Proof.
   intros. destruct x; destruct y; try (right; discriminate);
   destruct (peq p p0); try (left; rewrite e; auto); right; congruence.
-(*
-  intros. destruct x; destruct y. destruct (list_eq_dec peq l l0).
-  left. rewrite e. auto. right. congruence.
-  right. discriminate. right. discriminate.
-  destruct (peq p p0). left. rewrite e. auto.
-  right. congruence.
-*)
 Qed.
 
 End Block.
@@ -67,13 +55,6 @@ Definition posb (b:block) : positive :=
     | Stack p => p
     | Other p => p
   end.
-(*
-Definition listb (b:block) : option (list positive) :=
-  match b with
-    | Stack l => Some l
-    | Other _ => None
-  end.
-*)
 
 Definition succ (b:block) : block :=
   match b with
@@ -86,6 +67,7 @@ Definition is_stack (b:block) : bool :=
     | Stack _ => true
     |  _ => false
   end.
+
 
 (** A value is either:
 - a machine integer;

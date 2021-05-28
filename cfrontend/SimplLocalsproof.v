@@ -604,10 +604,10 @@ Proof.
   destruct (peq id id0). inv A.
   right. exploit Mem.alloc_result; eauto. exploit Mem.support_alloc; eauto.
   generalize (alloc_variables_support _ _ _ _ _ _ H0). intros A B C.
-  subst b. split. apply freshness. eapply Mem.sup_include_trans; eauto. apply Mem.sup_include_refl. rewrite B. apply Mem.sup_add_in1.  auto.
+  subst b. split. apply freshness. eapply Mem.sup_include_trans; eauto. apply Mem.sup_include_refl. rewrite B. apply Mem.sup_incr_in1.  auto.
   right. exploit Mem.support_alloc; eauto. intros B. rewrite B in A.
   destruct A.
-  split. intro. apply H2. apply Mem.sup_add_in2.  auto. auto.
+  split. intro. apply H2. apply Mem.sup_incr_in2.  auto. auto.
 Qed.
 
 Lemma alloc_variables_injective:

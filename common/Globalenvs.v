@@ -234,13 +234,13 @@ Program Definition add_global (ge: t) (idg: ident * globdef F V) : t :=
     _ _ _.
 Next Obligation.
   destruct ge; simpl in *.
-  rewrite PTree.gsspec in H. destruct (peq id i). inv H. apply Mem.sup_add_in1.
-  apply Mem.sup_add_in2. eauto.
+  rewrite PTree.gsspec in H. destruct (peq id i). inv H. apply Mem.sup_incr_in1.
+  apply Mem.sup_incr_in2. eauto.
 Qed.
 Next Obligation.
   destruct ge; simpl in *.
   rewrite NMap.gsspec in H. destruct (NMap.elt_eq b (fresh_block false genv_sup0)).
-  inv H. apply Mem.sup_add_in1. apply Mem.sup_add_in2. eauto.
+  inv H. apply Mem.sup_incr_in1. apply Mem.sup_incr_in2. eauto.
 Qed.
 Next Obligation.
   destruct ge; simpl in *.
@@ -863,7 +863,7 @@ Proof.
   simpl; intros. destruct (alloc_global m a) as [m1|] eqn:?; try discriminate.
   erewrite alloc_global_perm; eauto. eapply IHgl; eauto.
   unfold Mem.valid_block in *. erewrite alloc_global_support; eauto.
-  apply Mem.sup_add_in2. auto.
+  apply Mem.sup_incr_in2. auto.
 Qed.
 
 (** Data preservation properties *)
@@ -1434,7 +1434,7 @@ Proof.
   (* function *)
   destruct (Mem.alloc false m 0 1) as [m1 b] eqn:?.
   assert (b = Mem.nextblock false m). rewrite (Mem.alloc_result _ _ _ _ _ _ Heqp). reflexivity.
-  assert (sup_In b s). apply H1. subst b. apply Mem.sup_add_in1.  auto. subst b.
+  assert (sup_In b s). apply H1. subst b. apply Mem.sup_incr_in1.  auto. subst b.
   eapply Mem.drop_inject_neutral; eauto.
   eapply Mem.alloc_inject_neutral; eauto.
   (* variable *)
@@ -1444,7 +1444,7 @@ Proof.
   destruct (store_zeros m1 b 0 sz) as [m2|] eqn:?; try discriminate.
   destruct (store_init_data_list ge m2 b 0 init) as [m3|] eqn:?; try discriminate.
   assert (b = Mem.nextblock false m). rewrite (Mem.alloc_result _ _ _ _ _ _ Heqp). reflexivity.
-  assert (sup_In b s). apply H1. subst b. apply Mem.sup_add_in1. auto. subst b.
+  assert (sup_In b s). apply H1. subst b. apply Mem.sup_incr_in1. auto. subst b.
 
   eapply Mem.drop_inject_neutral; eauto.
   eapply store_init_data_list_neutral with (m := m2) (b := Mem.nextblock false m); eauto.
@@ -1456,7 +1456,7 @@ Remark advance_next_le: forall gl s, Mem.sup_include s (advance_next gl s).
 Proof.
   induction gl; simpl; intros.
   apply Mem.sup_include_refl.
-  apply Mem.sup_include_trans with (sup_incr false s0). intro. intro.  apply Mem.sup_add_in2. auto.  eauto.
+  apply Mem.sup_include_trans with (sup_incr false s0). intro. intro.  apply Mem.sup_incr_in2. auto.  eauto.
 Qed.
 
 Lemma alloc_globals_neutral:

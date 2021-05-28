@@ -100,7 +100,7 @@ Qed.
 End NMap.
 
 
-(* Declare Module Sup: SUP. *)
+(*Declare Module Sup: SUP. *)
 
 Module Sup <: SUP.
 
@@ -258,9 +258,9 @@ Proof.
       rewrite (fresh_pure1 (stack s) (stack_pure s)) in H. discriminate.
     + apply freshness2 in H. auto.
 Qed.
-
+(*
 Program Definition sup_add(b:block)(s:sup):sup :=
-  match b with
+  match b wit
     | Stack _ => mksup (b::(stack s)) (other s) _ (other_pure s)
     | Other _ => mksup (stack s)(b :: other s) (stack_pure s) _
   end.
@@ -272,14 +272,27 @@ Next Obligation.
 Proof.
   destruct H. rewrite <- H. auto. apply (other_pure s). auto.
 Qed.
-
-Definition sup_incr (f:bool) (s:sup) := sup_add (fresh_block f s) s.
+*)
+Program Definition sup_incr (f:bool) (s:sup):sup :=
+  let b := (fresh_block f s) in
+  match b with
+    | Stack _ => mksup (b::(stack s)) (other s) _ (other_pure s)
+    | Other _ => mksup (stack s)(b :: other s) (stack_pure s) _
+  end.
+Next Obligation.
+Proof.
+  destruct H. rewrite <- Heq_b in H. rewrite <- H. auto. apply (stack_pure s). auto.
+Qed.
+Next Obligation.
+Proof.
+  destruct H. rewrite <- Heq_b in H. rewrite <- H. auto. apply (other_pure s). auto.
+Qed.
 
 Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
 
-Theorem sup_add_in : forall b s b', sup_In b' (sup_add b s) <-> b' = b \/ sup_In b' s.
+Theorem sup_incr_in : forall f s b', sup_In b' (sup_incr f s) <-> b' = (fresh_block f s) \/ sup_In b' s.
 Proof.
-  split; destruct b.
+  split; destruct f.
 -  intros [H|H]. simpl in H. destruct H. left. auto. right. left. auto.
    simpl in H. right. right. auto.
 -  intros [H|H]. simpl in H. right. left. auto.
@@ -290,10 +303,10 @@ Proof.
    destruct H. left. auto. right. right. auto.
 Qed.
 
-Theorem sup_add_in1 : forall b s, sup_In b (sup_add b s).
-Proof. intros. apply sup_add_in. left. auto. Qed.
-Theorem sup_add_in2 : forall b s, sup_include s (sup_add b s).
-Proof. intros. intro. intro. apply sup_add_in. right. auto. Qed.
+Theorem sup_incr_in1 : forall f s, sup_In (fresh_block f s) (sup_incr f s).
+Proof. intros. apply sup_incr_in. left. auto. Qed.
+Theorem sup_incr_in2 : forall b s, sup_include s (sup_incr b s).
+Proof. intros. intro. intro. apply sup_incr_in. right. auto. Qed.
 
 Lemma sup_include_refl : forall s:sup, sup_include s s.
 Proof. intro. intro. auto. Qed.
@@ -305,12 +318,13 @@ Proof.
 Qed.
 
 Lemma sup_include_incr:
-  forall s b, sup_include s (sup_add b s).
+  forall s f, sup_include s (sup_incr f s).
 Proof.
-  intros. apply sup_add_in2.
+  intros. apply sup_incr_in2.
 Qed.
 
 End Sup.
+
 
 Module Mem <: MEM.
 Include Sup.
@@ -624,12 +638,12 @@ Program Definition empty: mem :=
   infinite memory. *)
 Lemma mem_incr_1: forall i m, sup_In (nextblock i m) (sup_incr i (m.(support))).
 Proof.
-  intros. unfold nextblock. unfold sup_incr. apply sup_add_in1.
+  intros. unfold nextblock. unfold sup_incr. apply sup_incr_in1.
 Qed.
 
 Lemma mem_incr_2: forall i m b, sup_In b (m.(support)) -> sup_In b (sup_incr i (m.(support))).
 Proof.
-  intros. unfold sup_incr. apply sup_add_in2. auto.
+  intros. unfold sup_incr. apply sup_incr_in2. auto.
 Qed.
 
 Program Definition alloc (i:info)(m: mem) (lo hi: Z) :=
@@ -2034,7 +2048,7 @@ Theorem valid_block_alloc_inv:
 Proof.
   unfold valid_block; intros.
   rewrite support_alloc in H. rewrite alloc_result.
-  apply sup_add_in. auto.
+  apply sup_incr_in. auto.
 Qed.
 
 Theorem perm_alloc_1:
@@ -4583,7 +4597,7 @@ Theorem alloc_inject_neutral:
   forall s m lo hi b m' i,
   alloc i m lo hi = (m', b) ->
   inject_neutral s m ->
-  sup_include (sup_add b (support m)) s ->
+  sup_include (sup_incr i (support m)) s ->
   inject_neutral s m'.
 Proof.
   intros; red.
@@ -4594,7 +4608,8 @@ Proof.
   apply perm_implies with Freeable; auto with mem.
   eapply perm_alloc_2; eauto. lia.
   unfold flat_inj. apply pred_dec_true.
-  apply H1. apply sup_add_in1.
+  apply H1. apply alloc_result in H.
+  rewrite H. apply sup_incr_in1.
 Qed.
 
 Theorem store_inject_neutral:
@@ -4784,7 +4799,7 @@ Lemma alloc_unchanged_on:
   unchanged_on m m'.
 Proof.
   intros; constructor; intros.
-- rewrite (support_alloc _ _ _ _ _ _ H). intro. intro. apply sup_add_in2. auto.
+- rewrite (support_alloc _ _ _ _ _ _ H). intro. intro. apply sup_incr_in2. auto.
 - split; intros.
   eapply perm_alloc_1; eauto.
   eapply perm_alloc_4; eauto.
@@ -4848,14 +4863,14 @@ Notation mem := Mem.mem.
 Notation sup := Mem.sup.
 Notation sup_In := Mem.sup_In.
 Notation sup_incr := Mem.sup_incr.
-Notation sup_add := Mem.sup_add.
 Notation sup_empty := Mem.sup_empty.
 Notation fresh_block := Mem.fresh_block.
 Notation freshness := Mem.freshness.
 Notation info := Mem.info.
+
 Global Opaque Mem.alloc Mem.free Mem.store Mem.load Mem.storebytes Mem.loadbytes Mem.fresh_block.
 
-Hint Resolve Mem.sup_add_in1 Mem.sup_add_in2 : core.
+Hint Resolve Mem.sup_incr_in1 Mem.sup_incr_in2 : core.
 Hint Resolve
   Mem.valid_not_valid_diff
   Mem.perm_implies

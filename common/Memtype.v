@@ -97,18 +97,16 @@ Parameter info : Type.
 Parameter fresh_block : info -> sup -> block.
 Parameter freshness : forall i s, ~sup_In (fresh_block i s) s.
 
-Parameter sup_add : block -> sup -> sup.
-
-Definition sup_incr(i:info)(s:sup) := sup_add (fresh_block i s) s.
+Parameter sup_incr : info -> sup -> sup.
 
 Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
 
-Parameter sup_add_in : forall b s b', sup_In b' (sup_add b s) <-> b' = b \/ sup_In b' s.
+Parameter sup_incr_in : forall f s b', sup_In b' (sup_incr f s) <-> b' = (fresh_block f s) \/ sup_In b' s.
 
-Theorem sup_add_in1 : forall b s, sup_In b (sup_add b s).
-Proof. intros. apply sup_add_in. left. auto. Qed.
-Theorem sup_add_in2 : forall b s, sup_include s (sup_add b s).
-Proof. intros. intro. intro. apply sup_add_in. right. auto. Qed.
+Theorem sup_incr_in1 : forall f s, sup_In (fresh_block f s) (sup_incr f s).
+Proof. intros. apply sup_incr_in. left. auto. Qed.
+Theorem sup_incr_in2 : forall f s, sup_include s (sup_incr f s).
+Proof. intros. intro. intro. apply sup_incr_in. right. auto. Qed.
 
 Lemma sup_include_refl : forall s:sup, sup_include s s.
 Proof. intro. intro. auto. Qed.
@@ -120,9 +118,9 @@ Proof.
 Qed.
 
 Lemma sup_include_incr:
-  forall s b, sup_include s (sup_add b s).
+  forall s f, sup_include s (sup_incr f s).
 Proof.
-  intros. apply sup_add_in2.
+  intros. apply sup_incr_in2.
 Qed.
 
 End SUP.
@@ -1264,7 +1262,7 @@ Axiom alloc_inject_neutral:
   forall s m lo hi b m' i,
   alloc i m lo hi = (m', b) ->
   inject_neutral s m ->
-  sup_include (sup_add b (support m)) s ->
+  sup_include (sup_incr i (support m)) s ->
   inject_neutral s m'.
 
 Axiom store_inject_neutral:
