@@ -99,214 +99,240 @@ Proof.
 Qed.
 End NMap.
 
+Module PassMap.
+  Definition elt := pass.
+  Definition elt_eq := list_eq_dec peq.
+  Definition t (A: Type) := pass -> A.
+  Definition init (A: Type) (v: A) := fun (_: pass) => v.
+  Definition get (A: Type) (x: pass) (m: t A) := m x.
+  Definition set (A: Type) (x: pass) (v: A) (m: t A) :=
+    fun (y: pass) => if elt_eq y x then v else m y.
+
+  Lemma gi:
+    forall (A: Type) (i: elt) (x: A), (init A x) i = x.
+Proof.
+    intros. reflexivity.
+Qed.
+  Lemma gss:
+    forall (A: Type) (i: elt) (x: A) (m: t A), (set A i x m) i = x.
+Proof.
+    intros. unfold set. case (elt_eq i i); intro.
+    reflexivity. tauto.
+Qed.
+  Lemma gso:
+    forall (A: Type) (i j: elt) (x: A) (m: t A),
+    i <> j -> (set A j x m) i = m i.
+Proof.
+    intros. unfold set. case (elt_eq i j); intro.
+    congruence. reflexivity.
+Qed.
+  Lemma gsspec:
+    forall (A: Type) (i j: elt) (x: A) (m: t A),
+    get A i (set A j x m) = if elt_eq i j then x else get A i m.
+Proof.
+    intros. unfold get, set, elt_eq. reflexivity.
+Qed.
+  Lemma gsident:
+    forall (A: Type) (i j: elt) (m: t A), get A j (set A  i (get A i m) m) = get A j m.
+Proof.
+    intros. unfold get, set. case (elt_eq j i); intro.
+    congruence. reflexivity.
+Qed.
+  Definition map (A B: Type) (f: A -> B) (m: t A) :=
+    fun (x: pass) => f(m x).
+  Lemma gmap:
+    forall (A B: Type) (f: A -> B) (i: elt) (m: t A),
+     get B i (map A B f m ) = f(get A i m).
+Proof.
+    intros. unfold get, map. reflexivity.
+Qed.
+  Lemma set2:
+    forall (A: Type) (i: elt) (x y: A) (m: t A),
+    set A i y (set A i x m) = set A i y m.
+Proof.
+  intros. apply extensionality.
+  intros. unfold set. case (elt_eq x0 i); auto.
+Qed.
+End PassMap.
 
 (*Declare Module Sup: SUP. *)
 
-Module Sup <: SUP.
+Module Sup.
+
+Local Notation "a # b" := (PassMap.get _ b a) (at level 1).
 
 Record sup' : Type := mksup {
-  stack : list block;
-  other : list block;
+  cpass : pass;
+  stack : PassMap.t (list positive);
+  global : list ident;
 
-  stack_pure : forall b, In b stack -> is_stack b = true;
-  other_pure : forall b, In b other -> is_stack b = false
+  pass_in : forall p:pass, ~ Subpass p cpass -> stack # p = nil;
 }.
 
 Definition sup := sup'.
 
-Program Definition sup_empty : sup := mksup nil nil _ _.
-Next Obligation.
-Proof. destruct H. Qed.
+Program Definition sup_empty : sup := mksup (nil) (PassMap.init _ nil) (nil) _.
 
-Definition sup_In(b:block)(s:sup) : Prop := In b (stack s) \/ In b (other s).
-
-Lemma sup_In_app : forall b s, In b (stack s ++ other s) <-> sup_In b s.
-Proof. unfold sup_In. intros. apply in_app. Qed.
+Definition sup_In(b:block)(s:sup) : Prop :=
+  match b with
+  | Stack pass pos => In pos ((stack s)#pass)
+  | Global id => In id (global s)
+  end.
 
 Definition empty_in: forall b, ~ sup_In b sup_empty.
-Proof. intros. unfold sup_In. simpl in *. intro. destruct H; auto. Qed.
+Proof. intros. destruct b; simpl in *; try congruence. Qed.
 
 Definition sup_dec : forall b s, {sup_In b s}+{~sup_In b s}.
 Proof.
-  intros.
-  destruct (In_dec eq_block b (stack s));
-  destruct (In_dec eq_block b (other s)).
-  left. left. auto. left. left. auto.
-  left. right. auto. right. intro. destruct H; auto.
+  intros. destruct b; simpl.
+  apply (In_dec peq p0 ((stack s)#p)).
+  apply (In_dec peq i (global s)).
 Qed.
 
-Fixpoint find_max_pos1 (l: list block) : block :=
+
+Fixpoint find_max_pos (l: list positive) : positive :=
   match l with
-  |nil => (Stack 1)
-  |hd::tl => let m' := find_max_pos1 tl in
-             match plt (posb hd) (posb m') with
+  |nil => 1
+  |hd::tl => let m' := find_max_pos tl in
+             match plt hd m' with
              |left _ => m'
              |right _ => hd
              end
   end.
 
-Theorem Lessthan1: forall b l, In b l -> Ple (posb b) (posb (find_max_pos1 l)).
+Lemma Lessthan: forall b l, In b l -> Ple b (find_max_pos l).
 Proof.
   intros.
   induction l.
   destruct H.
   destruct H;simpl.
-  - destruct (plt (posb a) (posb (find_max_pos1 l))); subst a.
+  - destruct (plt a (find_max_pos l)); subst a.
     + apply Plt_Ple. assumption.
     + apply Ple_refl.
-  - destruct (plt (posb a) (posb (find_max_pos1 l))); apply IHl in H.
+  - destruct (plt a (find_max_pos l)); apply IHl in H.
     + auto.
     + eapply Ple_trans. eauto.  apply Pos.le_nlt. apply n.
 Qed.
 
 
-Definition fresh_block1 (l:list block) := Stack(Pos.succ(posb (find_max_pos1 (l)))).
-Theorem freshness1 : forall s, ~In (fresh_block1 s) s.
+
+Definition fresh_pos (p:list positive):= ((find_max_pos p)+1)%positive.
+Definition pass_incr (s:sup):=
+  (fresh_pos(cpass s)::(cpass s)).
+
+
+Definition fresh_block (s:sup) :=
+  Stack (cpass s) ((fresh_pos ((stack s)#(cpass s)))).
+
+Lemma extend_notsub: forall p pass, ~ Subpass (p::pass) pass.
 Proof.
-  intros. unfold fresh_block1.
-  intro.
-  apply Lessthan1 in H.
-  assert (Plt (posb (find_max_pos1 s)) (Pos.succ(posb (find_max_pos1 s)))).
-  unfold posb. destruct (find_max_pos1 s); simpl;  apply Plt_succ.
-  destruct (find_max_pos1 s); simpl in *; auto.
-  assert (Plt p p).
-  { eapply Plt_Ple_trans; eauto; auto. } apply Plt_strict in H1; auto.
-  assert (Plt p p).
-  { eapply Plt_Ple_trans; eauto; auto. } apply Plt_strict in H1; auto.
+  intros. intro.
+  apply Subpass_len in H.
+  simpl in H. extlia.
 Qed.
 
-Lemma fresh_pure1 : forall l, (forall b, In b l -> is_stack b = true)
-                              -> is_stack (fresh_block1 l) = true.
-Proof.
-  intros. induction l. auto.
-  unfold fresh_block1 in *.
-  simpl.
-  destruct (plt (posb a) (posb (find_max_pos1 l))).
-  apply IHl. intros. apply H. right. auto.
-  auto.
+Program Definition sup_incr_frame (s:sup):sup:=
+  mksup (pass_incr s) (stack s) (global s) _.
+Next Obligation.
+ apply pass_in. intro. apply H.
+ apply Subpass_incr. auto.
 Qed.
 
-Fixpoint find_max_pos2 (l: list block) : block :=
-  match l with
-  |nil => (Other 1)
-  |hd::tl => let m' := find_max_pos2 tl in
-             match plt (posb hd) (posb m') with
-             |left _ => m'
-             |right _ => hd
-             end
-  end.
-
-Theorem Lessthan2: forall b l, In b l -> Ple (posb b) (posb (find_max_pos2 l)).
-Proof.
-  intros.
-  induction l.
-  destruct H.
-  destruct H;simpl.
-  - destruct (plt (posb a) (posb (find_max_pos2 l))); subst a.
-    + apply Plt_Ple. assumption.
-    + apply Ple_refl.
-  - destruct (plt (posb a) (posb (find_max_pos2 l))); apply IHl in H.
-    + auto.
-    + eapply Ple_trans. eauto.  apply Pos.le_nlt. apply n.
-Qed.
-
-Definition fresh_block2 (l:list block) := Other(Pos.succ(posb (find_max_pos2 (l)))).
-Theorem freshness2 : forall s, ~In (fresh_block2 s) s.
-Proof.
-  intros. unfold fresh_block2.
-  intro.
-  apply Lessthan2 in H.
-  assert (Plt (posb (find_max_pos2 s)) (Pos.succ(posb (find_max_pos2 s)))).
-  unfold posb. destruct (find_max_pos2 s); simpl;  apply Plt_succ.
-  destruct (find_max_pos2 s); simpl in *; auto.
-  assert (Plt p p).
-  { eapply Plt_Ple_trans; eauto; auto. } apply Plt_strict in H1; auto.
-  assert (Plt p p).
-  { eapply Plt_Ple_trans; eauto; auto. } apply Plt_strict in H1; auto.
-Qed.
-
-Lemma fresh_pure2 : forall l, (forall b, In b l -> is_stack b = false)
-                              -> is_stack (fresh_block2 l) = false.
-Proof.
-  intros. induction l. auto.
-  unfold fresh_block2 in *.
-  simpl.
-  destruct (plt (posb a) (posb (find_max_pos2 l))).
-  apply IHl. intros. apply H. right. auto.
-  auto.
-Qed.
-
-Definition info := bool.
-
-Definition fresh_block (f:info)(s:sup) :=
-  match f with
-    |true => fresh_block1 (stack s)
-    |false => fresh_block2 (other s)
-  end.
-
-Theorem freshness: forall i s, ~sup_In (fresh_block i s) s.
-Proof.
-  intros.
-  unfold sup_In.
-  intros [H|H].
-  - unfold fresh_block in H. destruct i.
-    + apply freshness1 in H. auto.
-    + apply stack_pure in H.
-      rewrite (fresh_pure2 (other s) (other_pure s)) in H. discriminate.
-  -  unfold fresh_block in H. destruct i.
-    + apply other_pure in H.
-      rewrite (fresh_pure1 (stack s) (stack_pure s)) in H. discriminate.
-    + apply freshness2 in H. auto.
-Qed.
-(*
-Program Definition sup_add(b:block)(s:sup):sup :=
-  match b wit
-    | Stack _ => mksup (b::(stack s)) (other s) _ (other_pure s)
-    | Other _ => mksup (stack s)(b :: other s) (stack_pure s) _
+Program Definition sup_free_frame (s:sup) : option sup:=
+  match (cpass s) with
+    |nil => None
+    |hd::tl => Some(mksup (tl)
+                    (PassMap.set _ (cpass s) nil (stack s)) (global s) _)
   end.
 Next Obligation.
+  destruct (eq_pass p (hd::tl)).
+  rewrite e. setoid_rewrite PassMap.gss. auto.
+  setoid_rewrite PassMap.gso. apply pass_in.
+  intro. apply H. apply Subpass_incr.
+Theorem freshness: forall s, ~sup_In (fresh_block s) s.
 Proof.
-  destruct H. rewrite <- H. auto. apply (stack_pure s). auto.
+  intros. unfold sup_In. simpl.
+  - intro. apply Lessthan in H. unfold fresh_pos in H. extlia.
 Qed.
-Next Obligation.
-Proof.
-  destruct H. rewrite <- H. auto. apply (other_pure s). auto.
-Qed.
-*)
-Program Definition sup_incr (f:bool) (s:sup):sup :=
-  let b := (fresh_block f s) in
+
+Program Definition sup_incr (s:sup):sup :=
+  let b := (fresh_block s) in
   match b with
-    | Stack _ => mksup (b::(stack s)) (other s) _ (other_pure s)
-    | Other _ => mksup (stack s)(b :: other s) (stack_pure s) _
+    |Stack pass pos => mksup pass (PassMap.set _ pass (pos::((stack s)#pass)) (stack s)) (global s) _
+
+    |_ => s
   end.
 Next Obligation.
 Proof.
-  destruct H. rewrite <- Heq_b in H. rewrite <- H. auto. apply (stack_pure s). auto.
+  unfold fresh_block in Heq_b. destruct f.
+  - unfold fresh_frameblock in Heq_b. inv Heq_b.
+    setoid_rewrite PassMap.gso.
+    apply (pass_in s). intro.
+    apply H. apply Subpass_incr. auto.
+    intro. rewrite H0 in H. apply H.
+    apply Subpass_refl.
+  - unfold fresh_frameblock in Heq_b. inv Heq_b.
+    setoid_rewrite PassMap.gso. apply pass_in. auto.
+    intro. apply H. rewrite H0.
+    apply Subpass_refl.
 Qed.
-Next Obligation.
-Proof.
-  destruct H. rewrite <- Heq_b in H. rewrite <- H. auto. apply (other_pure s). auto.
-Qed.
-
-Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
 
 Theorem sup_incr_in : forall f s b', sup_In b' (sup_incr f s) <-> b' = (fresh_block f s) \/ sup_In b' s.
 Proof.
-  split; destruct f.
--  intros [H|H]. simpl in H. destruct H. left. auto. right. left. auto.
-   simpl in H. right. right. auto.
--  intros [H|H]. simpl in H. right. left. auto.
-   simpl in H. destruct H. left. auto. right. right. auto.
--  intros [H|H]. left. simpl. left. auto.
-   destruct H. left. simpl. right. auto. right. simpl. auto.
--  intros [H|H]. right. simpl. left. auto.
-   destruct H. left. auto. right. right. auto.
+  split; destruct f; destruct b';auto.
+-  intros H. simpl in H.
+   destruct (eq_pass p (fresh_pos (cpass s)::cpass s)).
+   + rewrite e in H.
+     setoid_rewrite PassMap.gss in H.
+     left. simpl. erewrite pass_in in H.
+     inv H. auto. inv H0.
+     apply extend_notsub.
+   + right.
+     setoid_rewrite PassMap.gso in H; eauto.
+- intro. simpl in *.
+  destruct (eq_pass p (cpass s)).
+  + destruct (peq p0 (fresh_pos(stack s)#(cpass s))).
+    subst. auto. right. subst. setoid_rewrite PassMap.gss in H.
+    destruct H. congruence. congruence.
+  + right. setoid_rewrite PassMap.gso in H; eauto.
+- intros [H|H]. simpl. inv H. setoid_rewrite PassMap.gss.
+  simpl. left. auto. simpl. setoid_rewrite PassMap.gso. auto.
+  intro. simpl in *. erewrite pass_in in H. inv H.
+  rewrite H0. apply extend_notsub.
+- intros [H|H]. inv H. auto.
+- intros [H|H].
+  simpl. inv H. setoid_rewrite PassMap.gss. simpl. left. auto.
+  simpl in *. destruct (eq_pass p (cpass s)).
+  + subst. setoid_rewrite PassMap.gss. right. auto.
+  + setoid_rewrite PassMap.gso; auto.
+- intros [H|H]. inv H. auto.
 Qed.
+
+Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
 
 Theorem sup_incr_in1 : forall f s, sup_In (fresh_block f s) (sup_incr f s).
 Proof. intros. apply sup_incr_in. left. auto. Qed.
 Theorem sup_incr_in2 : forall b s, sup_include s (sup_incr b s).
 Proof. intros. intro. intro. apply sup_incr_in. right. auto. Qed.
+
+Definition sup_incr_glob (i:ident) (s:sup):=
+ mksup (cpass s) (stack s) (i::(global s)) (pass_in s).
+
+Theorem sup_incr_glob_in :  forall i s b,
+    sup_In b (sup_incr_glob i s) <-> b = (Global i) \/ sup_In b s.
+Proof.
+  split.
+  - unfold sup_incr_glob.
+    destruct b; simpl. auto. intros [H|H]. rewrite H. auto. auto.
+  - intros [H|H]; unfold sup_incr_glob.
+    rewrite H. simpl. auto.
+    destruct b. simpl. auto. simpl. auto.
+Qed.
+
+Theorem sup_incr_glob_in1 : forall i s, sup_In (Global i) (sup_incr_glob i s).
+Proof. intros. apply sup_incr_glob_in. left. auto. Qed.
+Theorem sup_incr_glob_in2 : forall i s, sup_include s (sup_incr_glob i s).
+Proof. intros. intro. intro. apply sup_incr_glob_in. right. auto. Qed.
 
 Lemma sup_include_refl : forall s:sup, sup_include s s.
 Proof. intro. intro. auto. Qed.
@@ -324,7 +350,6 @@ Proof.
 Qed.
 
 End Sup.
-
 
 Module Mem <: MEM.
 Include Sup.

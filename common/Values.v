@@ -30,9 +30,32 @@ End BLOCK.
 (*Declare Module Block : BLOCK.*)
 
 
+Definition pass := list positive.
+
+Definition eq_pass := list_eq_dec peq.
+
+Definition Subpass (p1 p2:pass): Prop :=
+  exists p0, p2 = p0++p1.
+
+Lemma Subpass_len : forall p1 p2 ,
+    Subpass p1 p2 -> (length p1 <= length p2)%nat.
+Proof.
+  intros. unfold Subpass in H. destruct H.
+  rewrite H. rewrite app_length. simpl. lia.
+Qed.
+
+Lemma Subpass_refl : forall p, Subpass p p.
+Proof. intros. exists nil. auto. Qed.
+
+Lemma Subpass_incr : forall p1 p2 pos, Subpass p1 p2 -> Subpass p1 (pos::p2).
+Proof.
+  intros. destruct H. exists (pos::x).
+  rewrite H. auto.
+Qed.
+
 Inductive block' :=
-  |Stack : positive -> block'
-  |Other : positive -> block'.
+  |Stack  : pass -> positive -> block'
+  |Global : ident -> block'.
 
 Module Block <: BLOCK.
 
@@ -40,8 +63,12 @@ Definition block := block'.
 
 Theorem eq_block : forall (x y:block),{x=y}+{x<>y}.
 Proof.
-  intros. destruct x; destruct y; try (right; discriminate);
-  destruct (peq p p0); try (left; rewrite e; auto); right; congruence.
+  intros. destruct x; destruct y.
+  - (destruct (eq_pass p p1)); try (right; congruence).
+    destruct (peq p0 p2). left. congruence. right. congruence.
+  - right. congruence.
+  - right. congruence.
+  - destruct (peq i i0). left. congruence. right. congruence.
 Qed.
 
 End Block.
@@ -49,22 +76,9 @@ End Block.
 Definition block := Block.block.
 Definition eq_block := Block.eq_block.
 
-
-Definition posb (b:block) : positive :=
-  match b with
-    | Stack p => p
-    | Other p => p
-  end.
-
-Definition succ (b:block) : block :=
-  match b with
-    | Stack p => Stack (Pos.succ p)
-    | Other p => Other (Pos.succ p)
-  end.
-
 Definition is_stack (b:block) : bool :=
   match b with
-    | Stack _ => true
+    | Stack _ _ => true
     |  _ => false
   end.
 
@@ -2246,7 +2260,20 @@ Qed.
   a sub-block at offset [ofs] of the block [b'] in [m2].
 *)
 
+Definition frameinj : Type := positive -> option (positive * Z).
+
+Definition stackinj : Type := pass -> option frameinj.
+
+Definition globinj : Type := positive -> bool.
+
+Definition meminj' : Type := (globinj * stackinj).
+
 Definition meminj : Type := block -> option (block * Z).
+
+Record meminjP (P:meminj -> Prop) := mkinjP {
+  minj : meminj;
+  property : P minj;
+}.
 
 (** A memory injection defines a relation between values that is the
   identity relation, except for pointer values which are shifted
