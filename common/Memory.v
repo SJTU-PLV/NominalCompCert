@@ -166,13 +166,15 @@ Record sup' : Type := mksup {
   stack : PassMap.t (list positive);
   global : list ident;
 
-  pass_in : forall p:pass, ~ Subpass p cpass -> stack # p = nil;
+  pass_in : forall p:pass, stack # p <> nil -> Subpass p cpass;
 }.
 
 Definition sup := sup'.
 
 Program Definition sup_empty : sup := mksup (nil) (PassMap.init _ nil) (nil) _.
-
+Next Obligation.
+ elim H. auto.
+Qed.
 Definition sup_In(b:block)(s:sup) : Prop :=
   match b with
   | Stack pass pos => In pos ((stack s)#pass)
@@ -220,9 +222,9 @@ Definition fresh_pos (p:list positive):= ((find_max_pos p)+1)%positive.
 Definition pass_incr (s:sup):=
   (fresh_pos(cpass s)::(cpass s)).
 
-
+Definition cpass_list (s:sup) := (stack s)#(cpass s).
 Definition fresh_block (s:sup) :=
-  Stack (cpass s) ((fresh_pos ((stack s)#(cpass s)))).
+  Stack (cpass s) ((fresh_pos (cpass_list s))).
 
 Lemma extend_notsub: forall p pass, ~ Subpass (p::pass) pass.
 Proof.
@@ -234,8 +236,7 @@ Qed.
 Program Definition sup_incr_frame (s:sup):sup:=
   mksup (pass_incr s) (stack s) (global s) _.
 Next Obligation.
- apply pass_in. intro. apply H.
- apply Subpass_incr. auto.
+ apply Subpass_incr. apply pass_in. auto.
 Qed.
 
 Program Definition sup_free_frame (s:sup) : option sup:=
@@ -246,73 +247,71 @@ Program Definition sup_free_frame (s:sup) : option sup:=
   end.
 Next Obligation.
   destruct (eq_pass p (hd::tl)).
-  rewrite e. setoid_rewrite PassMap.gss. auto.
-  setoid_rewrite PassMap.gso. apply pass_in.
-  intro. apply H. apply Subpass_incr.
+  rewrite e in H. rewrite Heq_anonymous in H. setoid_rewrite PassMap.gss in H.
+  congruence.
+  setoid_rewrite PassMap.gso in H. apply pass_in in H.
+  rewrite <- Heq_anonymous in H.
+  destruct H. destruct x. inv H. simpl in H0. congruence.
+  simpl in H. inv H. exists x. auto. congruence.
+Qed.
+
 Theorem freshness: forall s, ~sup_In (fresh_block s) s.
 Proof.
   intros. unfold sup_In. simpl.
-  - intro. apply Lessthan in H. unfold fresh_pos in H. extlia.
+  - intro. apply Lessthan in H. unfold fresh_pos in H.
+    unfold cpass_list in H. extlia.
 Qed.
 
 Program Definition sup_incr (s:sup):sup :=
-  let b := (fresh_block s) in
-  match b with
-    |Stack pass pos => mksup pass (PassMap.set _ pass (pos::((stack s)#pass)) (stack s)) (global s) _
-
-    |_ => s
-  end.
+    mksup (cpass s)
+          (PassMap.set _ (cpass s)
+                       ((fresh_pos(cpass_list s))::
+                                   (cpass_list s))
+                       (stack s))
+                       (global s) _.
 Next Obligation.
-Proof.
-  unfold fresh_block in Heq_b. destruct f.
-  - unfold fresh_frameblock in Heq_b. inv Heq_b.
-    setoid_rewrite PassMap.gso.
-    apply (pass_in s). intro.
-    apply H. apply Subpass_incr. auto.
-    intro. rewrite H0 in H. apply H.
-    apply Subpass_refl.
-  - unfold fresh_frameblock in Heq_b. inv Heq_b.
-    setoid_rewrite PassMap.gso. apply pass_in. auto.
-    intro. apply H. rewrite H0.
-    apply Subpass_refl.
+  destruct (eq_pass p (cpass s)).
+  - subst. apply Subpass_refl.
+  - setoid_rewrite PassMap.gso in H.
+    apply pass_in. auto. auto.
 Qed.
 
-Theorem sup_incr_in : forall f s b', sup_In b' (sup_incr f s) <-> b' = (fresh_block f s) \/ sup_In b' s.
+Theorem sup_incr_frame_in : forall s b, sup_In b (sup_incr_frame s) <-> sup_In b s.
 Proof.
-  split; destruct f; destruct b';auto.
--  intros H. simpl in H.
-   destruct (eq_pass p (fresh_pos (cpass s)::cpass s)).
-   + rewrite e in H.
-     setoid_rewrite PassMap.gss in H.
-     left. simpl. erewrite pass_in in H.
-     inv H. auto. inv H0.
-     apply extend_notsub.
+  intros. reflexivity.
+Qed.
+
+(*Theorem sup_free_frame_in : forall s b s', sup_free_frame s = Some s' ->
+      sup_In b s <-> sup_In b s' \/  *)
+Theorem sup_incr_in : forall s b', sup_In b' (sup_incr s) <-> b' = (fresh_block s) \/ sup_In b' s.
+Proof.
+  split; destruct b';auto.
+  - intros H. simpl in H.
+    destruct (eq_pass p (cpass s)).
+    + rewrite e in H.
+      setoid_rewrite PassMap.gss in H.
+      unfold fresh_block.
+      destruct H. left. congruence. right.
+      unfold cpass_list in H. simpl. congruence.
    + right.
      setoid_rewrite PassMap.gso in H; eauto.
-- intro. simpl in *.
-  destruct (eq_pass p (cpass s)).
-  + destruct (peq p0 (fresh_pos(stack s)#(cpass s))).
-    subst. auto. right. subst. setoid_rewrite PassMap.gss in H.
-    destruct H. congruence. congruence.
-  + right. setoid_rewrite PassMap.gso in H; eauto.
-- intros [H|H]. simpl. inv H. setoid_rewrite PassMap.gss.
-  simpl. left. auto. simpl. setoid_rewrite PassMap.gso. auto.
-  intro. simpl in *. erewrite pass_in in H. inv H.
-  rewrite H0. apply extend_notsub.
-- intros [H|H]. inv H. auto.
-- intros [H|H].
-  simpl. inv H. setoid_rewrite PassMap.gss. simpl. left. auto.
-  simpl in *. destruct (eq_pass p (cpass s)).
-  + subst. setoid_rewrite PassMap.gss. right. auto.
-  + setoid_rewrite PassMap.gso; auto.
-- intros [H|H]. inv H. auto.
+  - intro. simpl in *.
+    destruct (eq_pass p (cpass s)).
+  + subst. setoid_rewrite PassMap.gss.
+    destruct H. left.
+    unfold fresh_block in H. inv H. auto.
+    right. unfold cpass_list. auto.
+  + destruct H.
+    unfold fresh_block in H. inv H. congruence.
+    setoid_rewrite PassMap.gso. auto. auto.
+  - intros [H|H]. inv H. auto.
 Qed.
 
 Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
 
-Theorem sup_incr_in1 : forall f s, sup_In (fresh_block f s) (sup_incr f s).
+Theorem sup_incr_in1 : forall s, sup_In (fresh_block s) (sup_incr s).
 Proof. intros. apply sup_incr_in. left. auto. Qed.
-Theorem sup_incr_in2 : forall b s, sup_include s (sup_incr b s).
+Theorem sup_incr_in2 : forall s, sup_include s (sup_incr s).
 Proof. intros. intro. intro. apply sup_incr_in. right. auto. Qed.
 
 Definition sup_incr_glob (i:ident) (s:sup):=
@@ -344,14 +343,14 @@ Proof.
 Qed.
 
 Lemma sup_include_incr:
-  forall s f, sup_include s (sup_incr f s).
+  forall s , sup_include s (sup_incr s).
 Proof.
   intros. apply sup_incr_in2.
 Qed.
 
 End Sup.
 
-Module Mem <: MEM.
+Module Mem.
 Include Sup.
 Local Notation "a # b" := (NMap.get _ b a) (at level 1).
 
@@ -384,7 +383,7 @@ Record mem' : Type := mkmem {
 
 Definition mem := mem'.
 
-Definition nextblock (i:info)(m:mem) := fresh_block i (support m).
+Definition nextblock (m:mem) := fresh_block (support m).
 
 Lemma mkmem_ext:
  forall cont1 cont2 acc1 acc2 sup1 sup2 a1 a2 b1 b2 c1 c2,
@@ -661,39 +660,88 @@ Program Definition empty: mem :=
   memory state and the address of the fresh block, which initially contains
   undefined cells.  Note that allocation never fails: we model an
   infinite memory. *)
-Lemma mem_incr_1: forall i m, sup_In (nextblock i m) (sup_incr i (m.(support))).
+Lemma mem_incr_1: forall m, sup_In (nextblock m) (sup_incr (m.(support))).
 Proof.
   intros. unfold nextblock. unfold sup_incr. apply sup_incr_in1.
 Qed.
 
-Lemma mem_incr_2: forall i m b, sup_In b (m.(support)) -> sup_In b (sup_incr i (m.(support))).
+Lemma mem_incr_2: forall m b, sup_In b (m.(support)) -> sup_In b (sup_incr (m.(support))).
 Proof.
   intros. unfold sup_incr. apply sup_incr_in2. auto.
 Qed.
+Program Definition alloc_frame (m:mem) :=
+  mkmem (m.(mem_contents)) (m.(mem_access)) (sup_incr_frame (m.(support)))
+                                                            _ _ _.
+Next Obligation.
+  apply access_max.
+Qed.
 
-Program Definition alloc (i:info)(m: mem) (lo hi: Z) :=
-  (mkmem (NMap.set _ (nextblock i m)
+Next Obligation.
+  apply nextblock_noaccess.
+  intro. apply H. apply sup_incr_frame_in. auto.
+Qed.
+Next Obligation.
+  apply contents_default.
+Qed.
+
+Program Definition alloc (m: mem) (lo hi: Z) :=
+  (mkmem (NMap.set _ (nextblock m)
                    (ZMap.init Undef)
                    m.(mem_contents))
-         (NMap.set _ (nextblock i m)
+         (NMap.set _ (nextblock m)
                    (fun ofs k => if zle lo ofs && zlt ofs hi then Some Freeable else None)
                    m.(mem_access))
-         (sup_incr i (m.(support)))
+         (sup_incr (m.(support)))
          _ _ _,
-   (nextblock i m)).
+   (nextblock m)).
 Next Obligation.
-  repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock i m)).
+  repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)).
   subst b. destruct (zle lo ofs && zlt ofs hi); red; auto with mem.
   apply access_max.
 Qed.
 Next Obligation.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock i m)).
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)).
   subst b. elim H. apply mem_incr_1.
   apply nextblock_noaccess. red; intros; elim H.
   apply mem_incr_2. auto.
 Qed.
 Next Obligation.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock i m)). auto. apply contents_default.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)). auto. apply contents_default.
+Qed.
+
+
+Lemma mem_incr_glob1: forall i m, sup_In (Global i) (sup_incr_glob i (m.(support))).
+Proof.
+  intros. simpl. auto.
+Qed.
+
+Lemma mem_incr_glob2: forall i m b, sup_In b (m.(support)) -> sup_In b (sup_incr_glob i (m.(support))).
+Proof.
+  intros. unfold sup_incr_glob. destruct b. auto. simpl in *. auto.
+Qed.
+
+Program Definition alloc_glob(i:ident) (m:mem) (lo hi:Z) :=
+  mkmem (NMap.set _ (Global i)
+                  (ZMap.init Undef)
+                  m.(mem_contents))
+        (NMap.set _ (Global i)
+                  (fun ofs k => if zle lo ofs && zlt ofs hi then Some Freeable else None)
+                  m.(mem_access))
+        (sup_incr_glob i (m.(support)))
+        _ _ _.
+Next Obligation.
+  repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b (Global i)).
+  subst b. destruct (zle lo ofs && zlt ofs hi); red; auto with mem.
+  apply access_max.
+Qed.
+Next Obligation.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b (Global i)).
+  subst b. elim H. simpl. auto.
+  apply nextblock_noaccess. red; intros; elim H.
+  apply mem_incr_glob2. auto.
+Qed.
+Next Obligation.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b (Global i)). auto. apply contents_default.
 Qed.
 
 (** Freeing a block between the given bounds.
@@ -1300,7 +1348,6 @@ Variable b: block.
 Variable ofs: Z.
 Variable v: val.
 Variable m2: mem.
-Variable i : info.
 Hypothesis STORE: store chunk m1 b ofs v = Some m2.
 
 Lemma store_access: mem_access m2 = mem_access m1.
@@ -1332,7 +1379,7 @@ Qed.
 Local Hint Resolve perm_store_1 perm_store_2: mem.
 
 Theorem nextblock_store:
-  nextblock i m2 = nextblock i m1.
+  nextblock m2 = nextblock m1.
 Proof.
   intros.
   unfold store in STORE. destruct ( valid_access_dec m1 chunk b ofs Writable); inv STORE.
@@ -1776,7 +1823,6 @@ Variable b: block.
 Variable ofs: Z.
 Variable bytes: list memval.
 Variable m2: mem.
-Variable i: info.
 Hypothesis STORE: storebytes m1 b ofs bytes = Some m2.
 
 Lemma storebytes_access: mem_access m2 = mem_access m1.
@@ -1827,7 +1873,7 @@ Qed.
 Local Hint Resolve storebytes_valid_access_1 storebytes_valid_access_2: mem.
 
 Theorem nextblock_storebytes:
-  nextblock i m2 = nextblock i m1.
+  nextblock  m2 = nextblock m1.
 Proof.
   intros.
   unfold storebytes in STORE.
@@ -2027,22 +2073,21 @@ Variable m1: mem.
 Variables lo hi: Z.
 Variable m2: mem.
 Variable b: block.
-Variable i i1: info.
-Hypothesis ALLOC: alloc i m1 lo hi = (m2, b).
+Hypothesis ALLOC: alloc m1 lo hi = (m2, b).
 
 Theorem nextblock_alloc:
-  nextblock i1 m2 = fresh_block i1 (sup_incr i (support m1)).
+  nextblock m2 = fresh_block (sup_incr (support m1)).
 Proof.
   injection ALLOC; intros. rewrite <- H0; auto.
 Qed.
 
 Theorem support_alloc:
-  support m2 = sup_incr i (support m1).
+  support m2 = sup_incr (support m1).
 Proof.
   injection ALLOC; intros. rewrite <- H0; auto.
 Qed.
 Theorem alloc_result:
-  b = nextblock i m1.
+  b = nextblock m1.
 Proof.
   injection ALLOC; auto.
 Qed.
@@ -2080,7 +2125,7 @@ Theorem perm_alloc_1:
   forall b' ofs k p, perm m1 b' ofs k p -> perm m2 b' ofs k p.
 Proof.
   unfold perm; intros. injection ALLOC; intros. rewrite <- H1; simpl.
-  subst b. rewrite NMap.gsspec. destruct (NMap.elt_eq b' (nextblock i m1)); auto.
+  subst b. rewrite NMap.gsspec. destruct (NMap.elt_eq b' (nextblock m1)); auto.
   rewrite nextblock_noaccess in H. contradiction. subst b'. apply freshness.
 Qed.
 
@@ -2098,15 +2143,15 @@ Theorem perm_alloc_inv:
   if eq_block b' b then lo <= ofs < hi else perm m1 b' ofs k p.
 Proof.
   intros until p; unfold perm. inv ALLOC. simpl.
-  rewrite NMap.gsspec.  destruct (NMap.elt_eq b' (nextblock i m1)); intros.
+  rewrite NMap.gsspec.  destruct (NMap.elt_eq b' (nextblock m1)); intros.
   assert (zle lo ofs && zlt ofs hi = true).
     destruct(zle lo ofs && zlt ofs hi). reflexivity. contradiction.
-  - destruct(eq_block b' (nextblock i m1)).
+  - destruct(eq_block b' (nextblock m1)).
     + split. destruct (zle lo ofs); try auto. try contradiction.
     destruct (zlt ofs hi). try auto. simpl in H.
     destruct (zle lo ofs); simpl in H; contradiction.
     + congruence.
-  - destruct (eq_block b' (nextblock i m1)).
+  - destruct (eq_block b' (nextblock m1)).
     + congruence.
     + auto.
 Qed.
@@ -2260,7 +2305,6 @@ Variable m1: mem.
 Variable bf: block.
 Variables lo hi: Z.
 Variable m2: mem.
-Variable i: info.
 Hypothesis FREE: free m1 bf lo hi = Some m2.
 
 Theorem free_range_perm:
@@ -2278,7 +2322,7 @@ Proof.
 Qed.
 
 Theorem nextblock_free:
-  nextblock i m2 = nextblock i m1.
+  nextblock m2 = nextblock m1.
 Proof.
   rewrite free_result; reflexivity.
 Qed.
@@ -2478,11 +2522,10 @@ Variable b: block.
 Variable lo hi: Z.
 Variable p: permission.
 Variable m': mem.
-Variable i: info.
 Hypothesis DROP: drop_perm m b lo hi p = Some m'.
 
 Theorem nextblock_drop:
-  nextblock i m' = nextblock i m.
+  nextblock m' = nextblock m.
 Proof.
   unfold drop_perm in DROP. destruct (range_perm_dec m b lo hi Cur Freeable); inv DROP; auto.
 Qed.
@@ -3001,9 +3044,9 @@ Qed.
 (** Preservation of allocations *)
 
 Lemma alloc_right_inj:
-  forall f m1 m2 lo hi b2 m2' i,
+  forall f m1 m2 lo hi b2 m2',
   mem_inj f m1 m2 ->
-  alloc i m2 lo hi = (m2', b2) ->
+  alloc m2 lo hi = (m2', b2) ->
   mem_inj f m1 m2'.
 Proof.
   intros. injection H0. intros NEXT MEM.
@@ -3022,9 +3065,9 @@ Proof.
 Qed.
 
 Lemma alloc_left_unmapped_inj:
-  forall f m1 m2 lo hi m1' b1 i,
+  forall f m1 m2 lo hi m1' b1,
   mem_inj f m1 m2 ->
-  alloc i m1 lo hi = (m1', b1) ->
+  alloc m1 lo hi = (m1', b1) ->
   f b1 = None ->
   mem_inj f m1' m2.
 Proof.
@@ -3048,9 +3091,9 @@ Definition inj_offset_aligned (delta: Z) (size: Z) : Prop :=
   forall chunk, size_chunk chunk <= size -> (align_chunk chunk | delta).
 
 Lemma alloc_left_mapped_inj:
-  forall f m1 m2 lo hi m1' b1 b2 delta i,
+  forall f m1 m2 lo hi m1' b1 b2 delta ,
   mem_inj f m1 m2 ->
-  alloc i m1 lo hi = (m1', b1) ->
+  alloc m1 lo hi = (m1', b1) ->
   valid_block m2 b2 ->
   inj_offset_aligned delta (hi-lo) ->
   (forall ofs k p, lo <= ofs < hi -> perm m2 b2 (ofs + delta) k p) ->
@@ -3383,25 +3426,25 @@ Proof.
 Qed.
 
 Theorem alloc_extends:
-  forall m1 m2 lo1 hi1 b m1' lo2 hi2 i,
+  forall m1 m2 lo1 hi1 b m1' lo2 hi2,
   extends m1 m2 ->
-  alloc i m1 lo1 hi1 = (m1', b) ->
+  alloc m1 lo1 hi1 = (m1', b) ->
   lo2 <= lo1 -> hi1 <= hi2 ->
   exists m2',
-     alloc i m2 lo2 hi2 = (m2', b)
+     alloc m2 lo2 hi2 = (m2', b)
   /\ extends m1' m2'.
 Proof.
   intros. inv H.
-  case_eq (alloc i m2 lo2 hi2); intros m2' b' ALLOC.
+  case_eq (alloc m2 lo2 hi2); intros m2' b' ALLOC.
   assert (b' = b).
-    rewrite (alloc_result _ _ _ _ _ _ H0).
-    rewrite (alloc_result _ _ _ _ _ _ ALLOC).
+    rewrite (alloc_result _ _ _ _ _ H0).
+    rewrite (alloc_result _ _ _ _ _ ALLOC).
     auto.
   unfold nextblock. congruence. subst b'.
   exists m2'; split; auto.
   constructor.
-  rewrite (support_alloc _ _ _ _ _ _ H0).
-  rewrite (support_alloc _ _ _ _ _ _ ALLOC).
+  rewrite (support_alloc _ _ _ _ _ H0).
+  rewrite (support_alloc _ _ _ _ _ ALLOC).
   unfold nextblock. congruence.
   eapply alloc_left_mapped_inj with (m1 := m1) (m2 := m2') (b2 := b) (delta := 0); eauto.
   eapply alloc_right_inj; eauto.
@@ -3412,7 +3455,7 @@ Proof.
   eapply perm_alloc_2; eauto.
   lia.
   intros. eapply perm_alloc_inv in H; eauto.
-  generalize (perm_alloc_inv _ _ _ _ _ _ H0 b0 ofs Max Nonempty); intros PERM.
+  generalize (perm_alloc_inv _ _ _ _ _ H0 b0 ofs Max Nonempty); intros PERM.
   destruct (eq_block b0 b).
   subst b0.
   assert (EITHER: lo1 <= ofs < hi1 \/ ~(lo1 <= ofs < hi1)) by lia.
@@ -4072,9 +4115,9 @@ Qed.
 (* Preservation of allocations *)
 
 Theorem alloc_right_inject:
-  forall f m1 m2 lo hi b2 m2' i,
+  forall f m1 m2 lo hi b2 m2',
   inject f m1 m2 ->
-  alloc i m2 lo hi = (m2', b2) ->
+  alloc m2 lo hi = (m2', b2) ->
   inject f m1 m2'.
 Proof.
   intros. injection H0. intros NEXT MEM.
@@ -4096,9 +4139,9 @@ Proof.
 Qed.
 
 Theorem alloc_left_unmapped_inject:
-  forall f m1 m2 lo hi m1' b1 i,
+  forall f m1 m2 lo hi m1' b1 ,
   inject f m1 m2 ->
-  alloc i m1 lo hi = (m1', b1) ->
+  alloc m1 lo hi = (m1', b1) ->
   exists f',
      inject f' m1' m2
   /\ inject_incr f f'
@@ -4149,9 +4192,9 @@ Proof.
 Qed.
 
 Theorem alloc_left_mapped_inject:
-  forall f m1 m2 lo hi m1' b1 b2 delta i,
+  forall f m1 m2 lo hi m1' b1 b2 delta,
   inject f m1 m2 ->
-  alloc i m1 lo hi = (m1', b1) ->
+  alloc m1 lo hi = (m1', b1) ->
   valid_block m2 b2 ->
   0 <= delta <= Ptrofs.max_unsigned ->
   (forall ofs k p, perm m2 b2 ofs k p -> delta = 0 \/ 0 <= ofs < Ptrofs.max_unsigned) ->
@@ -4177,16 +4220,16 @@ Proof.
     inversion mi_inj0; constructor; eauto with mem.
     unfold f'; intros. destruct (eq_block b0 b1).
       inversion H8. subst b0 b3 delta0.
-      elim (fresh_block_alloc _ _ _ _ _ _ H0). eauto with mem.
+      elim (fresh_block_alloc _ _ _ _ _ H0). eauto with mem.
       eauto.
     unfold f'; intros. destruct (eq_block b0 b1).
       inversion H8. subst b0 b3 delta0.
-      elim (fresh_block_alloc _ _ _ _ _ _ H0).
+      elim (fresh_block_alloc _ _ _ _ _ H0).
       eapply perm_valid_block with (ofs := ofs). apply H9. generalize (size_chunk_pos chunk); lia.
       eauto.
     unfold f'; intros. destruct (eq_block b0 b1).
       inversion H8. subst b0 b3 delta0.
-      elim (fresh_block_alloc _ _ _ _ _ _ H0). eauto with mem.
+      elim (fresh_block_alloc _ _ _ _ _ H0). eauto with mem.
       apply memval_inject_incr with f; auto.
   exists f'. split. constructor.
 (* inj *)
@@ -4239,19 +4282,19 @@ Proof.
 Qed.
 
 Theorem alloc_parallel_inject:
-  forall f m1 m2 lo1 hi1 m1' b1 lo2 hi2 i,
+  forall f m1 m2 lo1 hi1 m1' b1 lo2 hi2,
   inject f m1 m2 ->
-  alloc i m1 lo1 hi1 = (m1', b1) ->
+  alloc m1 lo1 hi1 = (m1', b1) ->
   lo2 <= lo1 -> hi1 <= hi2 ->
   exists f', exists m2', exists b2,
-  alloc i m2 lo2 hi2 = (m2', b2)
+  alloc m2 lo2 hi2 = (m2', b2)
   /\ inject f' m1' m2'
   /\ inject_incr f f'
   /\ f' b1 = Some(b2, 0)
   /\ (forall b, b <> b1 -> f' b = f b).
 Proof.
   intros.
-  case_eq (alloc i m2 lo2 hi2). intros m2' b2 ALLOC.
+  case_eq (alloc m2 lo2 hi2). intros m2' b2 ALLOC.
   exploit alloc_left_mapped_inject.
   eapply alloc_right_inject; eauto.
   eauto.
@@ -4619,10 +4662,10 @@ Proof.
 Qed.
 
 Theorem alloc_inject_neutral:
-  forall s m lo hi b m' i,
-  alloc i m lo hi = (m', b) ->
+  forall s m lo hi b m',
+  alloc m lo hi = (m', b) ->
   inject_neutral s m ->
-  sup_include (sup_incr i (support m)) s ->
+  sup_include (sup_incr (support m)) s ->
   inject_neutral s m'.
 Proof.
   intros; red.
@@ -4819,12 +4862,12 @@ Proof.
 Qed.
 
 Lemma alloc_unchanged_on:
-  forall m lo hi m' b i,
-  alloc i m lo hi = (m', b) ->
+  forall m lo hi m' b,
+  alloc m lo hi = (m', b) ->
   unchanged_on m m'.
 Proof.
   intros; constructor; intros.
-- rewrite (support_alloc _ _ _ _ _ _ H). intro. intro. apply sup_incr_in2. auto.
+- rewrite (support_alloc _ _ _ _ _ H). intro. intro. apply sup_incr_in2. auto.
 - split; intros.
   eapply perm_alloc_1; eauto.
   eapply perm_alloc_4; eauto.
@@ -4891,7 +4934,6 @@ Notation sup_incr := Mem.sup_incr.
 Notation sup_empty := Mem.sup_empty.
 Notation fresh_block := Mem.fresh_block.
 Notation freshness := Mem.freshness.
-Notation info := Mem.info.
 
 Global Opaque Mem.alloc Mem.free Mem.store Mem.load Mem.storebytes Mem.loadbytes Mem.fresh_block.
 

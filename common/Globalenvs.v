@@ -78,7 +78,7 @@ Record t: Type := mksenv {
   public_symbol: ident -> bool;
   invert_symbol: block -> option ident;
   block_is_volatile: block -> bool;
-  support: sup;
+  support: list ident;
   (** Properties *)
   find_symbol_injective:
     forall id1 id2 b, find_symbol id1 = Some b -> find_symbol id2 = Some b -> id1 = id2;
@@ -89,9 +89,9 @@ Record t: Type := mksenv {
   public_symbol_exists:
     forall id, public_symbol id = true -> exists b, find_symbol id = Some b;
   find_symbol_below:
-    forall id b, find_symbol id = Some b -> sup_In b support;
+    forall id b, find_symbol id = Some b -> In b support;
   block_is_volatile_below:
-    forall b, block_is_volatile b = true -> sup_In b support
+    forall b, block_is_volatile b = true -> In b support
 }.
 
 Definition symbol_address (ge: t) (id: ident) (ofs: ptrofs) : val :=
@@ -228,8 +228,8 @@ Definition block_is_volatile (ge: t) (b: block) : bool :=
 Program Definition add_global (ge: t) (idg: ident * globdef F V) : t :=
   @mkgenv
     ge.(genv_public)
-    (PTree.set idg#1 (fresh_block false ge.(genv_sup)) ge.(genv_symb))
-    (NMap.set _ (fresh_block false ge.(genv_sup)) (Some (idg#2)) ge.(genv_defs))
+    (PTree.set idg#1 (fresh_block ge.(genv_sup)) ge.(genv_symb))
+    (NMap.set _ (fresh_block ge.(genv_sup)) (Some (idg#2)) ge.(genv_defs))
     (sup_incr false (ge.(genv_sup)))
     _ _ _.
 Next Obligation.
@@ -239,7 +239,7 @@ Next Obligation.
 Qed.
 Next Obligation.
   destruct ge; simpl in *.
-  rewrite NMap.gsspec in H. destruct (NMap.elt_eq b (fresh_block false genv_sup0)).
+  rewrite NMap.gsspec in H. destruct (NMap.elt_eq b (fresh_block genv_sup0)).
   inv H. apply Mem.sup_incr_in1. apply Mem.sup_incr_in2. eauto.
 Qed.
 Next Obligation.
@@ -434,7 +434,7 @@ Proof.
   - apply IHl. unfold P, add_global, find_symbol, find_def; simpl.
     rewrite ! PTree.gsspec. destruct (peq id id1).
     + subst id1. split; intros.
-      inv H0. exists (fresh_block false (genv_sup ge)); split; auto. apply NMap.gss.
+      inv H0. exists (fresh_block (genv_sup ge)); split; auto. apply NMap.gss.
       destruct H0 as (b & A & B). inv A. setoid_rewrite NMap.gss in B. auto.
     + red in H; rewrite H. split.
       intros (b & A & B). exists b; split; auto. setoid_rewrite NMap.gso; auto.
@@ -483,7 +483,7 @@ Proof.
   intros until g. unfold globalenv. apply add_globals_preserves.
 (* preserves *)
   unfold find_def; simpl; intros.
-  rewrite NMap.gsspec in H1. destruct (NMap.elt_eq b (fresh_block false(genv_sup ge))).
+  rewrite NMap.gsspec in H1. destruct (NMap.elt_eq b (fresh_block(genv_sup ge))).
   inv H1. exists id; auto.
   auto.
 (* base *)
@@ -1218,7 +1218,7 @@ Proof.
   exploit alloc_global_support; eauto. intros NB. split.
 - (* globals-initialized *)
   red; intros. unfold find_def in H2; simpl in H2.
-  rewrite NMap.gsspec in H2. destruct (NMap.elt_eq b (fresh_block false (genv_sup g))).
+  rewrite NMap.gsspec in H2. destruct (NMap.elt_eq b (fresh_block (genv_sup g))).
 + inv H2. destruct gd0 as [f|v]; simpl in H0.
 * destruct (Mem.alloc false m 0 1) as [m1 b] eqn:ALLOC.
   exploit Mem.alloc_result; eauto. intros RES. unfold Mem.nextblock in RES.
@@ -1234,7 +1234,7 @@ Proof.
   destruct (store_zeros m1 b 0 sz) as [m2|] eqn:?; try discriminate.
   destruct (store_init_data_list m2 b 0 init) as [m3|] eqn:?; try discriminate.
   exploit Mem.alloc_result; eauto. intro RES. unfold Mem.nextblock in RES.
-  replace (fresh_block false(genv_sup g)) with b by congruence.
+  replace (fresh_block(genv_sup g)) with b by congruence.
   split. red; intros. eapply Mem.perm_drop_1; eauto.
   split. intros.
   assert (0 <= ofs < sz).
@@ -1716,7 +1716,7 @@ Proof.
   intros. destruct H. constructor; simpl; intros.
 - congruence.
 - rewrite mge_sup0, ! PTree.gsspec. destruct (peq id0 id); auto.
-- rewrite mge_sup0, ! NMap.gsspec. destruct (NMap.elt_eq b (fresh_block false(genv_sup ge1))).
+- rewrite mge_sup0, ! NMap.gsspec. destruct (NMap.elt_eq b (fresh_block(genv_sup ge1))).
   constructor; auto.
   auto.
 Qed.
