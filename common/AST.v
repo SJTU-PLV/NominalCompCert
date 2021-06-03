@@ -479,10 +479,10 @@ Inductive external_function : Type :=
      (** A volatile store operation.   If the address given as first argument
          points within a volatile global variable, generate an event.
          Otherwise, produce no event and behave like a regular memory store. *)
-  | EF_malloc
+(*  | EF_malloc
      (** Dynamic memory allocation.  Takes the requested size in bytes
          as argument; returns a pointer to a fresh block of the given size.
-         Produces no observable event. *)
+         Produces no observable event. *) *)
   | EF_free
      (** Dynamic memory deallocation.  Takes a pointer to a block
          allocated by an [EF_malloc] external call and frees the
@@ -518,7 +518,7 @@ Definition ef_sig (ef: external_function): signature :=
   | EF_runtime name sg => sg
   | EF_vload chunk => mksignature (Tptr :: nil) (rettype_of_chunk chunk) cc_default
   | EF_vstore chunk => mksignature (Tptr :: type_of_chunk chunk :: nil) Tvoid cc_default
-  | EF_malloc => mksignature (Tptr :: nil) Tptr cc_default
+(*  | EF_malloc => mksignature (Tptr :: nil) Tptr cc_default *)
   | EF_free => mksignature (Tptr :: nil) Tvoid cc_default
   | EF_memcpy sz al => mksignature (Tptr :: Tptr :: nil) Tvoid cc_default
   | EF_annot kind text targs => mksignature targs Tvoid cc_default
@@ -536,7 +536,7 @@ Definition ef_inline (ef: external_function) : bool :=
   | EF_runtime name sg => false
   | EF_vload chunk => true
   | EF_vstore chunk => true
-  | EF_malloc => false
+(*  | EF_malloc => false *) 
   | EF_free => false
   | EF_memcpy sz al => true
   | EF_annot kind text targs => true

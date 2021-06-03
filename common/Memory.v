@@ -721,14 +721,14 @@ Proof.
 Qed.
 
 Program Definition alloc_glob(i:ident) (m:mem) (lo hi:Z) :=
-  mkmem (NMap.set _ (Global i)
+  ((mkmem (NMap.set _ (Global i)
                   (ZMap.init Undef)
                   m.(mem_contents))
         (NMap.set _ (Global i)
                   (fun ofs k => if zle lo ofs && zlt ofs hi then Some Freeable else None)
                   m.(mem_access))
         (sup_incr_glob i (m.(support)))
-        _ _ _.
+        _ _ _), (Global i)).
 Next Obligation.
   repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b (Global i)).
   subst b. destruct (zle lo ofs && zlt ofs hi); red; auto with mem.
@@ -743,6 +743,29 @@ Qed.
 Next Obligation.
   rewrite NMap.gsspec. destruct (NMap.elt_eq b (Global i)). auto. apply contents_default.
 Qed.
+
+Theorem perm_alloc_glob_1: forall m m1 id lo hi ofs b b' k p,
+  alloc_glob id m lo hi = (m1,b) ->
+  b' <> Global id ->
+  perm m b' ofs k p -> perm m1 b' ofs k p.
+Proof.
+  unfold perm; intros. injection H; intros. rewrite <- H3. simpl.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b' (Global id)); auto.
+  congruence.
+Qed.
+
+Lemma perm_alloc_glob_2 : forall m m1 id lo hi ofs b,
+    alloc_glob id m lo hi = (m1,b) ->
+    lo <= ofs < hi ->
+    perm m1 b ofs Cur Freeable.
+Proof.
+  unfold perm; intros. inv H. simpl.
+  rewrite NMap.gsspec.
+  rewrite pred_dec_true; auto.
+   unfold proj_sumbool. rewrite zle_true.
+  rewrite zlt_true. simpl. auto with mem. lia. lia.
+Qed.
+
 
 (** Freeing a block between the given bounds.
   Return the updated memory state where the given range of the given block
@@ -4680,6 +4703,43 @@ Proof.
   rewrite H. apply sup_incr_in1.
 Qed.
 
+Theorem alloc_glob_inject_neutral:
+  forall s m lo hi b m' id,
+  alloc_glob id m lo hi = (m', b) ->
+  inject_neutral s m ->
+  sup_include (sup_incr_glob id (support m)) s ->
+  inject_neutral s m'.
+Proof.
+  intros; red.
+  constructor.
+  - intros. unfold flat_inj in H2.
+    destruct (sup_dec b1 s). inv H2.
+    replace (ofs + 0) with ofs by lia. auto. inv H2.
+  - intros. unfold flat_inj in H2.
+    destruct (sup_dec b1 s). inv H2.
+    replace (ofs + 0) with ofs by lia. apply Z.divide_0_r. inv H2.
+  - intros. unfold flat_inj in H2.
+    destruct (sup_dec b1 s). inv H2.  2: inv H2.
+    inv H0. inversion H. simpl. subst. destruct (eq_block b2 (Global id)).
+    subst.
+    setoid_rewrite NMap.gss.
+    replace (ofs + 0) with ofs by lia.
+    rewrite ZMap.gi. constructor.
+    setoid_rewrite NMap.gso; eauto.
+    assert (flat_inj s b2 = Some (b2,0)).
+    unfold flat_inj. rewrite pred_dec_true. auto. auto.
+    apply mi_memval0; auto.
+    replace (ofs) with (ofs +0) by lia.
+    eapply mi_perm0. eauto.
+    inv H. unfold perm. unfold perm in H3. simpl in H3.
+    assert ((NMap.set (Z->perm_kind -> option permission) (Global id)
+           (fun (ofs : Z) (_:perm_kind) => if zle lo ofs && zlt ofs hi then
+           Some Freeable else None) (mem_access m)) # b2 =
+            (mem_access m) # b2).
+    apply NMap.gso. auto.
+    rewrite H in H3. auto.
+Qed.
+
 Theorem store_inject_neutral:
   forall chunk m b ofs v m' s,
   store chunk m b ofs v = Some m' ->
@@ -4931,6 +4991,7 @@ Notation mem := Mem.mem.
 Notation sup := Mem.sup.
 Notation sup_In := Mem.sup_In.
 Notation sup_incr := Mem.sup_incr.
+Notation sup_incr_glob := Mem.sup_incr_glob.
 Notation sup_empty := Mem.sup_empty.
 Notation fresh_block := Mem.fresh_block.
 Notation freshness := Mem.freshness.

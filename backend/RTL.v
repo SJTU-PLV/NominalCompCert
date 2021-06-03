@@ -269,7 +269,7 @@ Inductive step: state -> trace -> state -> Prop :=
         E0 (Returnstate s (regmap_optget or Vundef rs) m')
   | exec_function_internal:
       forall s f args m m' stk,
-      Mem.alloc true m 0 f.(fn_stacksize) = (m', stk) ->
+      Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
       step (Callstate s (Internal f) args m)
         E0 (State s
                   f

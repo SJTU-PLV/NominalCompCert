@@ -972,7 +972,7 @@ Proof.
   split. constructor. intuition congruence.
 Qed.
 
-(** ** Semantics of dynamic memory allocation (malloc) *)
+(** ** Semantics of dynamic memory allocation (malloc) 
 
 Inductive extcall_malloc_sem (ge: Senv.t):
               list val -> mem -> trace -> val -> mem -> Prop :=
@@ -1056,7 +1056,7 @@ Proof.
   subst.
   split. constructor. intuition congruence.
 Qed.
-
+*)
 (** ** Semantics of dynamic memory deallocation (free) *)
 
 Inductive extcall_free_sem (ge: Senv.t):
@@ -1523,7 +1523,7 @@ Definition external_call (ef: external_function): extcall_sem :=
   | EF_runtime name sg   => builtin_or_external_sem name sg
   | EF_vload chunk       => volatile_load_sem chunk
   | EF_vstore chunk      => volatile_store_sem chunk
-  | EF_malloc            => extcall_malloc_sem
+(*  | EF_malloc            => extcall_malloc_sem *)
   | EF_free              => extcall_free_sem
   | EF_memcpy sz al      => extcall_memcpy_sem sz al
   | EF_annot kind txt targs   => extcall_annot_sem txt targs
@@ -1542,7 +1542,7 @@ Proof.
   apply builtin_or_external_sem_ok.
   apply volatile_load_ok.
   apply volatile_store_ok.
-  apply extcall_malloc_ok.
+(*  apply extcall_malloc_ok. *)
   apply extcall_free_ok.
   apply extcall_memcpy_ok.
   apply extcall_annot_ok.
