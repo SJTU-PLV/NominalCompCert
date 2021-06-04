@@ -280,9 +280,15 @@ Theorem sup_incr_frame_in : forall s b, sup_In b (sup_incr_frame s) <-> sup_In b
 Proof.
   intros. reflexivity.
 Qed.
-
-(*Theorem sup_free_frame_in : forall s b s', sup_free_frame s = Some s' ->
-      sup_In b s <-> sup_In b s' \/  *)
+(*
+Theorem sup_free_frame_in : forall s b s', sup_free_frame s = Some s' ->
+      sup_In b s /\(forall p,  b <> Stack (cpass s) p)  <-> sup_In b s'.
+Proof.
+  intros. unfold sup_free_frame in H.
+  destruct (cpass s).
+  split; intros.
+  - unfold sup_free_frame in H. destruct (cpass s).
+*)
 Theorem sup_incr_in : forall s b', sup_In b' (sup_incr s) <-> b' = (fresh_block s) \/ sup_In b' s.
 Proof.
   split; destruct b';auto.
@@ -766,7 +772,6 @@ Proof.
   rewrite zlt_true. simpl. auto with mem. lia. lia.
 Qed.
 
-
 (** Freeing a block between the given bounds.
   Return the updated memory state where the given range of the given block
   has been invalidated: future reads and writes to this
@@ -792,7 +797,112 @@ Next Obligation.
   apply contents_default.
 Qed.
 
+Definition access_map :Type := NMap.t (Z -> perm_kind -> option permission).
+Definition free_block (ma : access_map)(p:pass)(pos:positive) : access_map :=
+        (NMap.set _ (Stack p pos) (fun _ _ => None) ma).
+Fixpoint free_block_list (ma: access_map )(p:pass) (l:list positive) {struct l} : access_map :=
+  match l with
+    | nil => ma
+    | pos::l' => free_block_list (free_block ma p pos) p l'
+  end.
 
+Lemma free_block_list_in1 : forall l ma ma' p ofs k b,
+    free_block_list ma p l = ma' ->
+    ma # b ofs k = None ->
+    ma' #b ofs k = None.
+Proof.
+  induction l; intros.
+  - inv H. auto.
+  - eapply IHl; eauto.
+    unfold free_block. destruct (eq_block b (Stack p a)).
+    + rewrite NMap.gsspec. rewrite pred_dec_true. auto. auto.
+    + assert (((NMap.set _ (Stack p a) (fun _ _ =>None) ma) # b) = (ma # b)).
+      apply NMap.gso. apply n. rewrite H1. auto.
+Qed.
+
+Lemma free_block_list_in : forall l ma p pos b ofs k,
+    (b = Stack p pos /\ In pos l) ->
+    (free_block_list ma p l)#b ofs k = None.
+Proof.
+  Admitted.
+
+Lemma free_block_list_notin : forall l ma p pos b ofs k,
+    ~ (b = Stack p pos /\ In pos l) ->
+    (free_block_list ma p l)#b ofs k = ma#b ofs k.
+Proof.
+  Admitted.
+
+Program Definition free_frame (m:mem) : option mem :=
+  match (cpass (support m)) with
+    |hd :: tl =>
+     Some (mkmem (m.(mem_contents))
+                 (free_block_list (m.(mem_access)) (hd::tl)
+                                  (PassMap.get _ (hd::tl)(stack m.(support))))
+                 (mksup tl (PassMap.set _ (hd::tl) nil (stack m.(support))) (global m.(support)) _ )
+                 _ _ _)
+    |nil => None
+  end.
+Next Obligation.
+  destruct (eq_pass p (hd::tl)).
+  rewrite e in H. rewrite Heq_anonymous in H. setoid_rewrite PassMap.gss in H.
+  congruence.
+  setoid_rewrite PassMap.gso in H. apply pass_in in H.
+  rewrite <- Heq_anonymous in H.
+  destruct H. destruct x. inv H. simpl in H0. congruence.
+  simpl in H. inv H. exists x. auto. congruence.
+Qed.
+Next Obligation.
+  set (l := PassMap.get _ (hd::tl)(stack (support m))).
+  destruct b.
+  - destruct (eq_pass p (hd::tl)).
+    destruct (In_dec peq p0 l).
+    erewrite ! free_block_list_in; eauto. constructor.
+    instantiate (1:= p0). subst. auto.
+    instantiate (1:= p0). subst. auto.
+    erewrite free_block_list_notin.
+    erewrite free_block_list_notin.
+    apply access_max.
+    instantiate (1:= p0). subst. intro. apply n. destruct H. auto.
+    instantiate (1:= p0). subst. intro. apply n. destruct H. auto.
+    erewrite free_block_list_notin.
+    erewrite free_block_list_notin.
+    apply access_max.
+    instantiate (1:= p0). subst. intro. inv H. inv H0. congruence.
+    instantiate (1:= p0). subst. intro. inv H. inv H0. congruence.
+  - erewrite free_block_list_notin.
+    erewrite free_block_list_notin.
+    apply access_max.
+    instantiate (1:= 1%positive). intro. inv H. inv H0.
+    instantiate (1:= 1%positive). intro. inv H. inv H0.
+Qed.
+Next Obligation.
+  set (l := PassMap.get _ (hd::tl)(stack (support m))).
+  destruct b.
+  - destruct (eq_pass p (hd::tl)).
+    destruct (In_dec peq p0 l).
+    erewrite ! free_block_list_in; eauto. constructor.
+    instantiate (1:= p0). subst. auto. auto.
+
+    eapply free_block_list_in1; eauto. apply nextblock_noaccess.
+    unfold sup_In in *. simpl in *. subst. auto.
+    eapply free_block_list_in1; eauto. apply nextblock_noaccess.
+    unfold sup_In in *. simpl in *.
+    setoid_rewrite PassMap.gso in H. auto. auto.
+  - erewrite free_block_list_in1. auto. eauto. auto.
+    apply nextblock_noaccess.
+    unfold sup_In in *. simpl in *. auto.
+Qed.
+Next Obligation.
+  apply contents_default.
+Qed.
+
+Lemma aaa : forall m m',
+    free_frame m = Some m' -> (cpass (support m)) <> nil.
+Proof.
+  intros.
+  destruct (cpass (support m)) eqn : H1.
+  unfold free_frame in H. admit. 
+  unfold free_frame in H. rewrite H1 in H.
 Definition free (m: mem) (b: block) (lo hi: Z): option mem :=
   if range_perm_dec m b lo hi Cur Freeable
   then Some(unchecked_free m b lo hi)
