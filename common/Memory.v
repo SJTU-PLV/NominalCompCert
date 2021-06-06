@@ -165,16 +165,16 @@ Record sup' : Type := mksup {
   cpass : pass;
   stack : PassMap.t (list positive);
   global : list ident;
-
-  pass_in : forall p:pass, stack # p <> nil -> Subpass p cpass;
 }.
 
 Definition sup := sup'.
 
-Program Definition sup_empty : sup := mksup (nil) (PassMap.init _ nil) (nil) _.
+Program Definition sup_empty : sup := mksup (nil) (PassMap.init _ nil) (nil).
+(*
 Next Obligation.
  elim H. auto.
 Qed.
+*)
 Definition sup_In(b:block)(s:sup) : Prop :=
   match b with
   | Stack pass pos => In pos ((stack s)#pass)
@@ -234,17 +234,19 @@ Proof.
 Qed.
 
 Program Definition sup_incr_frame (s:sup):sup:=
-  mksup (pass_incr s) (stack s) (global s) _.
+  mksup (pass_incr s) (stack s) (global s).
+(*
 Next Obligation.
  apply Subpass_incr. apply pass_in. auto.
 Qed.
-
+*)
 Program Definition sup_free_frame (s:sup) : option sup:=
   match (cpass s) with
     |nil => None
     |hd::tl => Some(mksup (tl)
-                    (PassMap.set _ (cpass s) nil (stack s)) (global s) _)
+                    (PassMap.set _ (cpass s) nil (stack s)) (global s))
   end.
+(*
 Next Obligation.
   destruct (eq_pass p (hd::tl)).
   rewrite e in H. rewrite Heq_anonymous in H. setoid_rewrite PassMap.gss in H.
@@ -254,7 +256,7 @@ Next Obligation.
   destruct H. destruct x. inv H. simpl in H0. congruence.
   simpl in H. inv H. exists x. auto. congruence.
 Qed.
-
+*)
 Theorem freshness: forall s, ~sup_In (fresh_block s) s.
 Proof.
   intros. unfold sup_In. simpl.
@@ -268,14 +270,15 @@ Program Definition sup_incr (s:sup):sup :=
                        ((fresh_pos(cpass_list s))::
                                    (cpass_list s))
                        (stack s))
-                       (global s) _.
+                       (global s).
+(*
 Next Obligation.
   destruct (eq_pass p (cpass s)).
   - subst. apply Subpass_refl.
   - setoid_rewrite PassMap.gso in H.
     apply pass_in. auto. auto.
 Qed.
-
+*)
 Theorem sup_incr_frame_in : forall s b, sup_In b (sup_incr_frame s) <-> sup_In b s.
 Proof.
   intros. reflexivity.
@@ -321,7 +324,7 @@ Theorem sup_incr_in2 : forall s, sup_include s (sup_incr s).
 Proof. intros. intro. intro. apply sup_incr_in. right. auto. Qed.
 
 Definition sup_incr_glob (i:ident) (s:sup):=
- mksup (cpass s) (stack s) (i::(global s)) (pass_in s).
+ mksup (cpass s) (stack s) (i::(global s)).
 
 Theorem sup_incr_glob_in :  forall i s b,
     sup_In b (sup_incr_glob i s) <-> b = (Global i) \/ sup_In b s.
@@ -838,10 +841,11 @@ Program Definition free_frame (m:mem) : option mem :=
      Some (mkmem (m.(mem_contents))
                  (free_block_list (m.(mem_access)) (hd::tl)
                                   (PassMap.get _ (hd::tl)(stack m.(support))))
-                 (mksup tl (PassMap.set _ (hd::tl) nil (stack m.(support))) (global m.(support)) _ )
+                 (mksup tl (PassMap.set _ (hd::tl) nil (stack m.(support))) (global m.(support)))
                  _ _ _)
     |nil => None
   end.
+(*
 Next Obligation.
   destruct (eq_pass p (hd::tl)).
   rewrite e in H. rewrite Heq_anonymous in H. setoid_rewrite PassMap.gss in H.
@@ -851,6 +855,7 @@ Next Obligation.
   destruct H. destruct x. inv H. simpl in H0. congruence.
   simpl in H. inv H. exists x. auto. congruence.
 Qed.
+*)
 Next Obligation.
   set (l := PassMap.get _ (hd::tl)(stack (support m))).
   destruct b.
@@ -900,9 +905,10 @@ Lemma aaa : forall m m',
     free_frame m = Some m' -> (cpass (support m)) <> nil.
 Proof.
   intros.
-  destruct (cpass (support m)) eqn : H1.
-  unfold free_frame in H. admit. 
-  unfold free_frame in H. rewrite H1 in H.
+  unfold free_frame in H. destruct (cpass (support m)). inv H.
+  congruence.
+Qed.
+
 Definition free (m: mem) (b: block) (lo hi: Z): option mem :=
   if range_perm_dec m b lo hi Cur Freeable
   then Some(unchecked_free m b lo hi)

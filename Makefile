@@ -90,16 +90,6 @@ BACKEND=\
   SelectOpproof.v SelectDivproof.v SplitLongproof.v \
   SelectLongproof.v Selectionproof.v \
   Registers.v RTL.v \
-  RTLgen.v RTLgenspec.v RTLgenproof.v \
-  Tailcall.v Tailcallproof.v \
-  Inlining.v Inliningspec.v Inliningproof.v \
-  Renumber.v Renumberproof.v \
-  RTLtyping.v \
-  Kildall.v Liveness.v \
-  ValueDomain.v ValueAOp.v ValueAnalysis.v \
-  ConstpropOp.v Constprop.v ConstpropOpproof.v Constpropproof.v \
-  CSEdomain.v CombineOp.v CSE.v CombineOpproof.v CSEproof.v \
-  NeedDomain.v NeedOp.v Deadcode.v Deadcodeproof.v \
   Unusedglob.v Unusedglobproof.v \
   Machregs.v Locations.v Conventions1.v Conventions.v LTL.v \
   Allocation.v Allocproof.v \
