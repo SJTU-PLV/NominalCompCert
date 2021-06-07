@@ -29,7 +29,6 @@ End BLOCK.
 
 (*Declare Module Block : BLOCK.*)
 
-
 Definition pass := list positive.
 
 Definition eq_pass := list_eq_dec peq.

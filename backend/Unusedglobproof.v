@@ -1021,12 +1021,13 @@ Proof.
   erewrite Mem.support_free; eauto.
   erewrite Mem.support_free; eauto. *)
   destruct or; simpl; auto.
-
+  admit.
 - (* internal function *)
+  assert (Mem.inject j (Mem.alloc_frame m) (Mem.alloc_frame tm)). admit.
   exploit Mem.alloc_parallel_inject. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros (j' & tm' & tstk & C & D & E & F & G).
-  assert (STK: stk = Mem.nextblock true m) by (eapply Mem.alloc_result; eauto).
-  assert (TSTK: tstk = Mem.nextblock true tm) by (eapply Mem.alloc_result; eauto).
+  assert (STK: stk = Mem.nextblock m) by (eapply Mem.alloc_result; eauto).
+  assert (TSTK: tstk = Mem.nextblock tm) by (eapply Mem.alloc_result; eauto).
   assert (STACKS': match_stacks j' s ts (Mem.support m) (Mem.support tm)).
   {
     apply match_stacks_incr with j; auto.

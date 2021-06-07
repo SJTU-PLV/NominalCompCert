@@ -264,20 +264,20 @@ Inductive step: state -> trace -> state -> Prop :=
   | exec_Ireturn:
       forall s f stk pc rs m or m',
       (fn_code f)!pc = Some(Ireturn or) ->
-      Mem.free_frame m = Some m' ->
+      Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
       step (State s f (Vptr stk Ptrofs.zero) pc rs m)
         E0 (Returnstate s (regmap_optget or Vundef rs) m')
   | exec_function_internal:
-      forall s f args m m' m'' stk,
-      Mem.alloc_frame m = m' ->
-      Mem.alloc m' 0 f.(fn_stacksize) = (m'', stk) ->
+      forall s f args m m' stk,
+(*       Mem.alloc_frame m = m' -> *)
+      Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
       step (Callstate s (Internal f) args m)
         E0 (State s
                   f
                   (Vptr stk Ptrofs.zero)
                   f.(fn_entrypoint)
                   (init_regs args f.(fn_params))
-                  m'')
+                  m')
   | exec_function_external:
       forall s ef args res t m m',
       external_call ef ge args m t res m' ->

@@ -99,98 +99,90 @@ Proof.
 Qed.
 End NMap.
 
-Module PassMap.
-  Definition elt := pass.
-  Definition elt_eq := list_eq_dec peq.
-  Definition t (A: Type) := pass -> A.
-  Definition init (A: Type) (v: A) := fun (_: pass) => v.
-  Definition get (A: Type) (x: pass) (m: t A) := m x.
-  Definition set (A: Type) (x: pass) (v: A) (m: t A) :=
-    fun (y: pass) => if elt_eq y x then v else m y.
-
-  Lemma gi:
-    forall (A: Type) (i: elt) (x: A), (init A x) i = x.
-Proof.
-    intros. reflexivity.
-Qed.
-  Lemma gss:
-    forall (A: Type) (i: elt) (x: A) (m: t A), (set A i x m) i = x.
-Proof.
-    intros. unfold set. case (elt_eq i i); intro.
-    reflexivity. tauto.
-Qed.
-  Lemma gso:
-    forall (A: Type) (i j: elt) (x: A) (m: t A),
-    i <> j -> (set A j x m) i = m i.
-Proof.
-    intros. unfold set. case (elt_eq i j); intro.
-    congruence. reflexivity.
-Qed.
-  Lemma gsspec:
-    forall (A: Type) (i j: elt) (x: A) (m: t A),
-    get A i (set A j x m) = if elt_eq i j then x else get A i m.
-Proof.
-    intros. unfold get, set, elt_eq. reflexivity.
-Qed.
-  Lemma gsident:
-    forall (A: Type) (i j: elt) (m: t A), get A j (set A  i (get A i m) m) = get A j m.
-Proof.
-    intros. unfold get, set. case (elt_eq j i); intro.
-    congruence. reflexivity.
-Qed.
-  Definition map (A B: Type) (f: A -> B) (m: t A) :=
-    fun (x: pass) => f(m x).
-  Lemma gmap:
-    forall (A B: Type) (f: A -> B) (i: elt) (m: t A),
-     get B i (map A B f m ) = f(get A i m).
-Proof.
-    intros. unfold get, map. reflexivity.
-Qed.
-  Lemma set2:
-    forall (A: Type) (i: elt) (x y: A) (m: t A),
-    set A i y (set A i x m) = set A i y m.
-Proof.
-  intros. apply extensionality.
-  intros. unfold set. case (elt_eq x0 i); auto.
-Qed.
-End PassMap.
-
 (*Declare Module Sup: SUP. *)
 
 Module Sup.
 
-Local Notation "a # b" := (PassMap.get _ b a) (at level 1).
+Inductive tree :=
+  |Leaf : tree
+  |Node : positive -> (list positive) -> list tree -> tree.
 
 Record sup' : Type := mksup {
-  cpass : pass;
-  stack : PassMap.t (list positive);
+  stack : tree;
   global : list ident;
 }.
 
 Definition sup := sup'.
-
-Program Definition sup_empty : sup := mksup (nil) (PassMap.init _ nil) (nil).
 (*
-Next Obligation.
- elim H. auto.
-Qed.
+Inductive tree_add_frame : (t:tree) :=
+  match t with
+    |Leaf => Node 1 nil nil
+    |Node pos block_l tree_l =>
+     match tree_l with
+       |nil => Node pos block_l ((Node pos nil nil) :: tl )
+       |hd :: tl =>
+      let t1 := tree_add_frame hd in
+      Node pos block_l ((t1)::tl)
+           end
+       end
 *)
+
+Program Definition sup_empty : sup := mksup Leaf nil.
+Definition node_ideq (t:tree) (p:positive) : bool :=
+  match t with
+  |Leaf => false
+  |Node pos bl tl => peq pos p
+  end.
+Fixpoint find_subtree (p:positive)(treel : list tree) :tree :=
+  match treel with
+    |nil => Leaf
+    |hd :: tl => if node_ideq hd p then hd else find_subtree p tl
+  end.
+Fixpoint tree_In (p:pass) (pos : positive) (t:tree) :=
+  match p with
+    |nil => False
+    |hd :: tl =>
+     match t with
+       |Leaf => False
+       |Node hd0 blockl treel => if peq hd hd0 then
+                         match tl with
+                           |nil => In pos blockl
+                           |_ => tree_In tl pos (find_subtree pos treel)
+                         end
+                         else False
+     end
+  end.
+
 Definition sup_In(b:block)(s:sup) : Prop :=
   match b with
-  | Stack pass pos => In pos ((stack s)#pass)
+  | Stack pass pos => tree_In pass pos (stack s)
   | Global id => In id (global s)
   end.
 
 Definition empty_in: forall b, ~ sup_In b sup_empty.
-Proof. intros. destruct b; simpl in *; try congruence. Qed.
+Proof.
+  intros. destruct b; simpl in *; try congruence.
+  destruct p; auto.
+Qed.
+
+Definition tree_dec :forall pass p tree , {tree_In pass p tree}+{~tree_In pass p tree}.
+Proof.
+  induction pass.
+  - auto.
+  - intros.
+    destruct  tree0. auto.
+    simpl. destruct (peq a p0).
+    + destruct pass. apply In_dec. apply peq.
+      apply IHpass.
+    + auto.
+Qed.
 
 Definition sup_dec : forall b s, {sup_In b s}+{~sup_In b s}.
 Proof.
   intros. destruct b; simpl.
-  apply (In_dec peq p0 ((stack s)#p)).
+  apply tree_dec.
   apply (In_dec peq i (global s)).
 Qed.
-
 
 Fixpoint find_max_pos (l: list positive) : positive :=
   match l with
@@ -202,6 +194,38 @@ Fixpoint find_max_pos (l: list positive) : positive :=
              end
   end.
 
+Fixpoint find_forest (tl : list tree) : positive :=
+  match tl with
+    |nil => 1
+    |h :: t => let m1 := find_forest t in
+              let m :=
+                  (match h with
+                  |Leaf => 1%positive
+                  |Node pos lb lt => let m2 := find_forest lt in
+                                    if plt pos m2 then m2 else pos
+                   end
+                                                                  )in
+              if plt m m1 then m1 else m
+  end.
+
+Fixpoint find_max_pos_tree (t: tree) : positive :=
+  match t with
+  |Leaf => 1
+  |Node pos bl tl =>
+   let ml := find_list tl find_max_pos_tree in
+   let m := find_max_pos ml in
+   if plt pos m then m else pos
+  end.
+with find_max_pos_list (tl : list tree) : positive :=
+  match tl with
+    |nil => 1
+    |h :: t => let m' := find_max_pos_list t in
+              let m'' := find_max_pos h in
+              match plt pos m' m'' with
+                |left _ => m''
+                |right _ => m'
+              end
+  end
 Lemma Lessthan: forall b l, In b l -> Ple b (find_max_pos l).
 Proof.
   intros.
