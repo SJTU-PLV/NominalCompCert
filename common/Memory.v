@@ -99,91 +99,6 @@ Proof.
 Qed.
 End NMap.
 
-(*Declare Module Sup: SUP. *)
-
-Module Sup.
-
-Inductive tree :=
-  |Leaf : tree
-  |Node : positive -> (list positive) -> list tree -> tree.
-
-Record sup' : Type := mksup {
-  stack : tree;
-  global : list ident;
-}.
-
-Definition sup := sup'.
-(*
-Inductive tree_add_frame : (t:tree) :=
-  match t with
-    |Leaf => Node 1 nil nil
-    |Node pos block_l tree_l =>
-     match tree_l with
-       |nil => Node pos block_l ((Node pos nil nil) :: tl )
-       |hd :: tl =>
-      let t1 := tree_add_frame hd in
-      Node pos block_l ((t1)::tl)
-           end
-       end
-*)
-
-Program Definition sup_empty : sup := mksup Leaf nil.
-Definition node_ideq (t:tree) (p:positive) : bool :=
-  match t with
-  |Leaf => false
-  |Node pos bl tl => peq pos p
-  end.
-Fixpoint find_subtree (p:positive)(treel : list tree) :tree :=
-  match treel with
-    |nil => Leaf
-    |hd :: tl => if node_ideq hd p then hd else find_subtree p tl
-  end.
-Fixpoint tree_In (p:pass) (pos : positive) (t:tree) :=
-  match p with
-    |nil => False
-    |hd :: tl =>
-     match t with
-       |Leaf => False
-       |Node hd0 blockl treel => if peq hd hd0 then
-                         match tl with
-                           |nil => In pos blockl
-                           |_ => tree_In tl pos (find_subtree pos treel)
-                         end
-                         else False
-     end
-  end.
-
-Definition sup_In(b:block)(s:sup) : Prop :=
-  match b with
-  | Stack pass pos => tree_In pass pos (stack s)
-  | Global id => In id (global s)
-  end.
-
-Definition empty_in: forall b, ~ sup_In b sup_empty.
-Proof.
-  intros. destruct b; simpl in *; try congruence.
-  destruct p; auto.
-Qed.
-
-Definition tree_dec :forall pass p tree , {tree_In pass p tree}+{~tree_In pass p tree}.
-Proof.
-  induction pass.
-  - auto.
-  - intros.
-    destruct  tree0. auto.
-    simpl. destruct (peq a p0).
-    + destruct pass. apply In_dec. apply peq.
-      apply IHpass.
-    + auto.
-Qed.
-
-Definition sup_dec : forall b s, {sup_In b s}+{~sup_In b s}.
-Proof.
-  intros. destruct b; simpl.
-  apply tree_dec.
-  apply (In_dec peq i (global s)).
-Qed.
-
 Fixpoint find_max_pos (l: list positive) : positive :=
   match l with
   |nil => 1
@@ -193,39 +108,6 @@ Fixpoint find_max_pos (l: list positive) : positive :=
              |right _ => hd
              end
   end.
-
-Fixpoint find_forest (tl : list tree) : positive :=
-  match tl with
-    |nil => 1
-    |h :: t => let m1 := find_forest t in
-              let m :=
-                  (match h with
-                  |Leaf => 1%positive
-                  |Node pos lb lt => let m2 := find_forest lt in
-                                    if plt pos m2 then m2 else pos
-                   end
-                                                                  )in
-              if plt m m1 then m1 else m
-  end.
-
-Fixpoint find_max_pos_tree (t: tree) : positive :=
-  match t with
-  |Leaf => 1
-  |Node pos bl tl =>
-   let ml := find_list tl find_max_pos_tree in
-   let m := find_max_pos ml in
-   if plt pos m then m else pos
-  end.
-with find_max_pos_list (tl : list tree) : positive :=
-  match tl with
-    |nil => 1
-    |h :: t => let m' := find_max_pos_list t in
-              let m'' := find_max_pos h in
-              match plt pos m' m'' with
-                |left _ => m''
-                |right _ => m'
-              end
-  end
 Lemma Lessthan: forall b l, In b l -> Ple b (find_max_pos l).
 Proof.
   intros.
@@ -241,23 +123,235 @@ Proof.
 Qed.
 
 
-
 Definition fresh_pos (p:list positive):= ((find_max_pos p)+1)%positive.
-Definition pass_incr (s:sup):=
-  (fresh_pos(cpass s)::(cpass s)).
 
-Definition cpass_list (s:sup) := (stack s)#(cpass s).
-Definition fresh_block (s:sup) :=
-  Stack (cpass s) ((fresh_pos (cpass_list s))).
+(*Declare Module Sup: SUP. *)
+Module Sup.
 
-Lemma extend_notsub: forall p pass, ~ Subpass (p::pass) pass.
+Inductive tree : Set :=
+  |Leaf : (list positive) -> tree
+  |Node : (list positive)  -> list tree -> tree.
+
+Fixpoint current_depth (t:tree) : nat :=
+  match t with
+  |Leaf bl => O
+  |Node bl tl =>
+   match tl with
+     |nil => 1
+     |hd::tl => S(current_depth hd)
+   end
+  end.
+
+Fixpoint find_right_node (d:nat) (t:tree) : option (pass*tree) :=
+  match d,t with
+    |O , _ => Some (nil,Leaf nil)
+    |S n , Leaf bl => None
+    |S O , Node bl tl => Some ((S O)::nil,t)
+    |S(S n), Node bl tl =>
+      match tl with
+        |nil => None
+        |hd'::tl' => match (find_right_node (S n) hd') with
+                    |Some (p',t') => Some (length(tl)::p',t')
+                    |None => None
+                end
+      end
+  end.
+
+Definition tree1 := Node nil ((Node nil nil) :: (Node nil nil)::nil).
+
+Definition tree2 := Node nil (tree1::(Node nil nil) :: tree1 ::(Node nil nil)::nil).
+Compute find_right_node 2 tree1.
+Compute find_right_node 3 tree2.
+Definition fresh_pos_node (t:tree) : positive :=
+  match t with
+    |Leaf bl => fresh_pos bl
+    |Node bl tl => fresh_pos bl
+  end.
+
+Definition fresh_block_tree (d:nat) (t:tree) : block :=
+  match find_right_node d t with
+    |Some (p,t) => Stack p (fresh_pos_node t)
+    |None => Stack nil 1 (*nonsense*)
+  end.
+
+Fixpoint tree_incr_block (d:nat) (t:tree) : option tree :=
+  match d,t with
+    |O, Leaf bl => Some (Leaf ((fresh_pos bl)::bl))
+    |O, Node bl tl => Some (Node ((fresh_pos bl)::bl) tl) (*nonsense*)
+    |S n, Leaf bl => None (*nonsense*)
+    |S O, Node bl tl => Some (Node ((fresh_pos bl)::bl) tl)
+    |S (S n),Node bl tl =>
+     match tl with
+       |nil => None
+       |hd'::tl' => match (tree_incr_block (S n) hd') with
+                     |Some t' => Some (Node bl (t'::tl'))
+                     |None => None
+                   end
+     end
+  end.
+
+Fixpoint tree_incr_frame (d:nat)(t:tree) : option tree :=
+  match d,t with
+    |O, Leaf bl => Some (Node nil nil)
+    |O, Node bl tl => None
+    |S n,Leaf bl => None
+    |S O,Node bl tl => Some (Node bl ((Node nil nil)::tl))
+    |S (S n),Node bl tl =>
+     match tl with
+       |nil => None
+       |hd'::tl' => match (tree_incr_frame (S n) hd') with
+                     |Some t' => Some (Node bl (t'::tl'))
+                     |None => None
+                   end
+     end
+  end.
+
+Lemma depth_find : forall (n:nat)(t:tree),
+    (n <= (current_depth t))%nat ->
+    exists pass node, find_right_node n t = Some (pass,node)
+                 /\ (n <> O -> exists bl tl, node = Node bl tl).
 Proof.
-  intros. intro.
-  apply Subpass_len in H.
-  simpl in H. extlia.
+  induction n.
+  - intros. inv H.
+    + destruct t; simpl.
+      -- exists nil,(Leaf l). split. auto. intro. congruence.
+      -- inv H1. destruct l0; inv H0.
+    + destruct t. inv H0. exists nil,(Node l l0). simpl. split; auto.
+      congruence.
+ - intros. simpl.
+   destruct n.
+   + destruct t. inv H. simpl. eexists. eexists. eauto.
+   + destruct t. inv H. simpl.
+     destruct l0. inv H. inv H1.
+     exploit IHn; eauto. instantiate (1:=t). simpl in H.
+     lia. intros (p1&n1&H1&H2).
+     rewrite H1. eauto.
 Qed.
 
-Program Definition sup_incr_frame (s:sup):sup:=
+Lemma find_incr_block : forall (n:nat) (t node:tree) (pass:pass),
+    find_right_node n t = Some (pass,node) ->
+    exists t' ,tree_incr_block n t= Some t'.
+Proof.
+  induction n.
+  - intros. destruct t; inv H; simpl; eauto.
+  - intros. destruct t.
+    + inv H. destruct n; inv H1.
+    + simpl in *. destruct n. eauto.
+    destruct l0. inv H.
+    destruct (find_right_node (S n) t) eqn:?. destruct p.
+    inv H. exploit IHn. eauto. intros (t' ,H1).
+    rewrite H1. eauto.
+    inv H.
+Qed.
+
+Lemma find_incr_frame : forall (n:nat) (t node:tree) (pass:pass),
+    find_right_node n t = Some (pass,node) ->
+    exists t' ,tree_incr_block n t= Some t'.
+Proof.
+  induction n.
+  - intros. destruct t; inv H; simpl; eauto.
+  - intros. destruct t.
+    + inv H. destruct n; inv H1.
+    + simpl in *. destruct n. eauto.
+    destruct l0. inv H.
+    destruct (find_right_node (S n) t) eqn:?. destruct p.
+    inv H. exploit IHn. eauto. intros (t' ,H1).
+    rewrite H1. eauto.
+    inv H.
+Qed.
+
+Record sup' : Type := mksup {
+  depth : nat;
+
+  stack : tree;
+  global : list ident;
+
+  depth_le : (depth<= current_depth stack)%nat
+}.
+
+Definition sup := sup'.
+
+Program Definition sup_empty : sup := mksup O (Leaf nil) nil _.
+
+Fixpoint tree_In (p:pass) (pos:positive) (t:tree) :=
+  match t,p with
+    |Leaf bl,_ =>In pos bl
+    |(Node _ _),nil => False
+    |(Node listb listt), hd::nil => In pos listb
+    |(Node listb listt), hd::(hd1::tl) =>
+     match nth_error listt (length(listt) - hd) with
+       |None => False
+       |Some t' => tree_In tl pos t'
+     end
+  end.
+
+Definition sup_In(b:block)(s:sup) : Prop :=
+  match b with
+  | Stack pass pos => tree_In (rev pass) pos (stack s)
+  | Global id => In id (global s)
+  end.
+
+Definition empty_in: forall b, ~ sup_In b sup_empty.
+Proof.
+  intros. destruct b; simpl in *; try congruence.
+  destruct p; unfold tree_In; auto.
+Qed.
+
+Definition tree_dec :forall pass p tree , {tree_In pass p tree}+{~tree_In pass p tree}.
+Proof.
+  induction pass.
+  - intros. simpl.
+    destruct tree0;
+    apply In_dec; apply peq.
+  - intros.
+    destruct  tree0; simpl.
+    apply In_dec. apply peq.
+    simpl. destruct (nth_error l0 (Datatypes.length l0 -a)).
+    + apply IHpass.
+    + auto.
+Qed.
+
+Definition sup_dec : forall b s, {sup_In b s}+{~sup_In b s}.
+Proof.
+  intros. destruct b; simpl.
+  apply tree_dec.
+  apply (In_dec peq i (global s)).
+Qed.
+
+
+(* TODO : find rightmost block (depth) and how to build a tree only change it *)
+
+Definition fresh_block (s:sup): block :=
+  fresh_block_tree (depth s) (stack s).
+
+Definition node_In pos t :=
+  match t with
+  |Leaf bl => In pos bl
+  |Node bl tl => In pos bl
+  end.
+
+Lemma find_in : forall n t p node pos,
+    find_right_node n t = Some (p,node) ->
+    tree_In p pos t <-> node_In pos node.
+Proof.
+  induction n.
+  - intros. destruct t; inv H; reflexivity.
+  - intros. destruct t. inv H. destruct n; congruence.
+    simpl in H. destruct n. inv H. simpl.
+
+Theorem freshness: forall s, ~sup_In (fresh_block s) s.
+Proof.
+  intros. unfold sup_In. simpl. unfold fresh_block.
+  unfold fresh_block_tree.
+  generalize (depth_le s). intros.
+  apply depth_find in H. destruct H as (pass0&node&H1&H2).
+  rewrite H1.
+
+Qed.
+
+
+Program Definition sup_incr_frame (s:sup) : sup :=
+  
   mksup (pass_incr s) (stack s) (global s).
 (*
 Next Obligation.
@@ -281,12 +375,6 @@ Next Obligation.
   simpl in H. inv H. exists x. auto. congruence.
 Qed.
 *)
-Theorem freshness: forall s, ~sup_In (fresh_block s) s.
-Proof.
-  intros. unfold sup_In. simpl.
-  - intro. apply Lessthan in H. unfold fresh_pos in H.
-    unfold cpass_list in H. extlia.
-Qed.
 
 Program Definition sup_incr (s:sup):sup :=
     mksup (cpass s)

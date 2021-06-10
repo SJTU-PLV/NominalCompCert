@@ -29,10 +29,16 @@ End BLOCK.
 
 (*Declare Module Block : BLOCK.*)
 
-Definition pass := list positive.
+Definition pass := list nat.
 
-Definition eq_pass := list_eq_dec peq.
-
+Lemma nat_eq: forall n1 n2 :nat, {n1=n2} + {n1<>n2}.
+  intros.
+  destruct (Nat.eqb n1 n2) eqn:?.
+  apply Nat.eqb_eq in Heqb. left. auto.
+  apply Nat.eqb_neq in Heqb. right. auto.
+Qed.
+Definition eq_pass := list_eq_dec nat_eq.
+(*
 Definition Subpass (p1 p2:pass): Prop :=
   exists p0, p2 = p0++p1.
 
@@ -51,7 +57,7 @@ Proof.
   intros. destruct H. exists (pos::x).
   rewrite H. auto.
 Qed.
-
+*)
 Inductive block' :=
   |Stack  : pass -> positive -> block'
   |Global : ident -> block'.
