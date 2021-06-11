@@ -127,33 +127,43 @@ Definition fresh_pos (p:list positive):= ((find_max_pos p)+1)%positive.
 
 (*Declare Module Sup: SUP. *)
 Module Sup.
+Import List.ListNotations.
+Inductive stree : Set :=
+  |Node : (list positive)  -> list stree -> option stree -> stree.
 
-Inductive tree : Set :=
-  |Node : (list positive)  -> list tree -> tree.
+Definition empty_tree := Node [] [] None.
 
-Fixpoint current_depth (t:tree) : nat :=
+(** Next tree and path *)
+
+Fixpoint next_stree (t: stree) : (stree * path) :=
   match t with
-  |Node bl nil => O
-  |Node bl (hd::tl) => S(current_depth hd)
+  | Node bl l None =>
+    let idx := length l in
+    (Node bl l (Some empty_tree), [idx])
+  | Node bl l (Some t') =>
+    let (t'', p) := next_stree t' in
+    (Node bl l (Some t''), (length l) :: p)
   end.
 
-Fixpoint find_right_node (d:nat) (t:tree) : option (pass*tree) :=
-  match d,t with
-    |O, _ => Some (nil,t)
-    |S n, Node _ nil => None
-    |S n, Node _ (hd::tl) =>
-        match (find_right_node n hd) with
-          |Some (p',t') => Some (length(hd::tl)::p',t')
-          |None => None
-        end
-  end.
+(** Return from the active node (use well-founded induction) *)
 
+Fixpoint return_stree (t: stree) : option stree :=
+  match t with
+  | Node bl l None =>
+    None
+  | Node bl l (Some t) =>
+    match return_stree t with
+    | None => Some (Node bl (l ++ [t]) None)
+    | Some t' => Some (Node bl l (Some t'))
+    end
+  end.
+(*
 Definition tree0 := Node nil nil.
 Definition tree1 := Node nil ((Node nil nil) :: (Node nil nil)::nil).
 
 Definition tree3 := Node nil ((
                                Node nil (tree1::tree0::tree1::tree0::nil))::nil).
-Compute find_right_node 3 tree3.
+Compute find_right_node 3 tree3. *)
 Definition fresh_pos_node (t:tree) : positive :=
   match t with
     |Node bl tl => fresh_pos bl
@@ -420,8 +430,8 @@ Proof.
   exploit find_incr_frame. eauto.
   intros (t''&H2). symmetry in H2. *)
   unfold sup_incr_frame.
-  Admitted.
-(*  destruct (tree_incr_frame (depth s) (stack s)) eqn:?.
+  Set Printing All.
+  destruct (tree_incr_frame (depth s) (stack s)) eqn:?.
   - simpl in *.  rewrite Heqo.
 
  refine (

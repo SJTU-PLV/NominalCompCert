@@ -29,7 +29,7 @@ End BLOCK.
 
 (*Declare Module Block : BLOCK.*)
 
-Definition pass := list nat.
+Definition path := list nat.
 
 Lemma nat_eq: forall n1 n2 :nat, {n1=n2} + {n1<>n2}.
   intros.
@@ -37,7 +37,7 @@ Lemma nat_eq: forall n1 n2 :nat, {n1=n2} + {n1<>n2}.
   apply Nat.eqb_eq in Heqb. left. auto.
   apply Nat.eqb_neq in Heqb. right. auto.
 Qed.
-Definition eq_pass := list_eq_dec nat_eq.
+Definition eq_path := list_eq_dec nat_eq.
 (*
 Definition Subpass (p1 p2:pass): Prop :=
   exists p0, p2 = p0++p1.
@@ -59,7 +59,7 @@ Proof.
 Qed.
 *)
 Inductive block' :=
-  |Stack  : pass -> positive -> block'
+  |Stack  : path -> positive -> block'
   |Global : ident -> block'.
 
 Module Block <: BLOCK.
@@ -69,7 +69,7 @@ Definition block := block'.
 Theorem eq_block : forall (x y:block),{x=y}+{x<>y}.
 Proof.
   intros. destruct x; destruct y.
-  - (destruct (eq_pass p p1)); try (right; congruence).
+  - (destruct (eq_path p p1)); try (right; congruence).
     destruct (peq p0 p2). left. congruence. right. congruence.
   - right. congruence.
   - right. congruence.
@@ -2267,7 +2267,7 @@ Qed.
 
 Definition frameinj : Type := positive -> option (positive * Z).
 
-Definition stackinj : Type := pass -> option frameinj.
+Definition stackinj : Type := path -> option frameinj.
 
 Definition globinj : Type := positive -> bool.
 
