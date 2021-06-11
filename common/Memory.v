@@ -125,340 +125,344 @@ Qed.
 
 Definition fresh_pos (p:list positive):= ((find_max_pos p)+1)%positive.
 
+Lemma fresh_notin : forall l, ~In (fresh_pos l) l.
+Proof.
+  intros. intro. apply Lessthan in H.
+  unfold fresh_pos in H. extlia.
+Qed.
+
 (*Declare Module Sup: SUP. *)
 Module Sup.
+Import List.ListNotations.
+Inductive stree : Set :=
+  |Node : (list positive)  -> list stree -> option stree -> stree.
 
-Inductive tree : Set :=
-  |Node : (list positive)  -> list tree -> tree.
+Definition empty_stree := Node [] [] None.
 
-Fixpoint current_depth (t:tree) : nat :=
+(** Next tree and path *)
+
+Fixpoint next_stree (t: stree) : (stree * path) :=
   match t with
-  |Node bl nil => O
-  |Node bl (hd::tl) => S(current_depth hd)
+  | Node bl l None =>
+    let idx := length l in
+    (Node bl l (Some empty_stree), [idx])
+  | Node bl l (Some t') =>
+    let (t'', p) := next_stree t' in
+    (Node bl l (Some t''), (length l) :: p)
+  end.
+(*
+Fixpoint fresh_block_stree (t:stree) : (positive * path) :=
+  match t with
+  | Node bl l None =>
+    let idx := length l in
+    (fresh_pos bl,nil)
+  | Node bl l (Some t') =>
+    let (pos,p) := fresh_block_stree t' in
+    (pos,(length l)::p)
+  end.
+*)
+Fixpoint next_block_stree (t:stree) : (positive * path * stree) :=
+  match t with
+  |Node bl l None =>
+   ((fresh_pos bl), nil, Node ((fresh_pos bl)::bl) l None)
+  |Node bl l (Some t') =>
+   match next_block_stree t' with (pos,path,t'')
+    => (pos, (length l)::path, Node bl l (Some t''))
+   end
   end.
 
-Fixpoint find_right_node (d:nat) (t:tree) : option (pass*tree) :=
-  match d,t with
-    |O, _ => Some (nil,t)
-    |S n, Node _ nil => None
-    |S n, Node _ (hd::tl) =>
-        match (find_right_node n hd) with
-          |Some (p',t') => Some (length(hd::tl)::p',t')
-          |None => None
-        end
+(** Return from the active node (use well-founded induction) *)
+
+(** path for inductive proof, maybe there is another solution? *)
+Fixpoint return_stree (t: stree) : option (stree * path):=
+  match t with
+  | Node bl l None =>
+    None
+  | Node bl l (Some t) =>
+    let idx := length l in
+    match return_stree t with
+    | None => Some ((Node bl (l ++ [t]) None),[idx])
+    | Some (t',p') => Some ((Node bl l (Some t')),(idx::p'))
+    end
   end.
 
+Fixpoint stree_In (p:path) (pos:positive) (t:stree) :=
+  match p,t with
+    |nil , Node bl dt _ => In pos bl
+    |n::p' , Node bl dt None =>
+     match nth_error dt n with
+       |Some t' => stree_In p' pos t'
+       |None => False
+     end
+    |n::p',Node bl dt (Some t') =>
+     if (n =? (length dt))%nat then stree_In p' pos t' else
+     match nth_error dt n with
+       |Some t'' => stree_In p' pos t''
+       |None => False
+     end
+  end.
+
+(*
 Definition tree0 := Node nil nil.
 Definition tree1 := Node nil ((Node nil nil) :: (Node nil nil)::nil).
 
 Definition tree3 := Node nil ((
                                Node nil (tree1::tree0::tree1::tree0::nil))::nil).
-Compute find_right_node 3 tree3.
-Definition fresh_pos_node (t:tree) : positive :=
+Compute find_right_node 3 tree3. *)
+Definition fresh_pos_node (t:stree) : positive :=
   match t with
-    |Node bl tl => fresh_pos bl
+    |Node bl _ _ => fresh_pos bl
   end.
-
-Definition fresh_block_tree (d:nat) (t:tree) : block :=
-  match find_right_node d t with
-    |Some (p,t) => Stack p (fresh_pos_node t)
-    |None => Stack nil 1 (*nonsense*)
-  end.
-
-Fixpoint tree_incr_block (d:nat) (t:tree) : option tree :=
-  match d,t with
-    |O, Node bl tl => Some (Node ((fresh_pos bl)::bl) tl)
-    |S n, Node bl nil => None
-    |S n, Node bl (hd::tl) =>
-     match (tree_incr_block n hd) with
-     |Some hd' => Some (Node bl (hd'::tl))
-     |None => None
-     end
-  end.
-Compute current_depth tree3.
-Compute tree_incr_block 3 tree3.
-Fixpoint tree_incr_frame (d:nat)(t:tree) : option tree :=
-  match d,t with
-    |O, Node bl tl => Some (Node bl ((Node nil nil)::tl))
-    |S n,Node bl nil => None
-    |S n,Node bl (hd::tl) =>
-     match (tree_incr_frame n hd) with
-     |Some hd' => Some (Node bl (hd'::tl))
-     |None => None
-     end
-  end.
-
-Compute tree_incr_frame 3 tree3.
-
-Definition is_leaf (t:tree) :=
-  match t with
-    |Node _ nil => true
-    |Node _ _ => false
-  end.
-
-Lemma depth_find : forall (n:nat)(t:tree),
-    (n <= (current_depth t))%nat ->
-    exists pass node, find_right_node n t = Some (pass,node).
-Proof.
-  induction n.
-  - intros. inv H; simpl; eauto.
-  - intros. simpl.
-    destruct n.
-    + destruct t. destruct l0. inv H. simpl. eauto.
-    + destruct t. destruct l0. inv H. simpl in H.
-     exploit IHn; eauto. instantiate (1:=t).
-     lia. intros (p1&n1&H1).
-     rewrite H1. eauto.
-Qed.
-
-Lemma find_incr_block : forall (n:nat) (t node:tree) (pass:pass),
-    find_right_node n t = Some (pass,node) ->
-    exists t' ,tree_incr_block n t= Some t'.
-Proof.
-  induction n.
-  - intros. destruct t; inv H; simpl; eauto.
-  - intros. destruct t. destruct l0.
-    + inv H.
-    + simpl. simpl in H. destruct (find_right_node n t) eqn:?.
-      destruct p. inv H.
-      exploit IHn. eauto. intros (t' ,H1).
-      rewrite H1. eauto.
-      inv H.
-Qed.
-
-Lemma find_incr_frame : forall (n:nat) (t node:tree) (pass:pass),
-    find_right_node n t = Some (pass,node) ->
-    exists t' ,tree_incr_frame n t= Some t'.
-Proof.
-  induction n.
-  - intros. destruct t; inv H; simpl; eauto.
-  - intros. destruct t. destruct l0.
-    + inv H.
-    + simpl. simpl in H. destruct (find_right_node n t) eqn:?.
-      destruct p. inv H.
-      exploit IHn. eauto. intros (t' ,H1).
-      rewrite H1. eauto.
-      inv H.
-Qed.
-
-Lemma tree_incr_block_depth : forall n t t',
-    tree_incr_block n t = Some t' ->
-    current_depth t = current_depth t'.
-Proof.
-  induction n.
-  - intros. destruct t. inv H. auto.
-  - intros. destruct t. destruct l0.
-    inv H. simpl in *. destruct (tree_incr_block n t) eqn:?.
-    destruct t0. inv H.
-    exploit IHn. eauto. intro. simpl in *. lia.
-    inv H.
-Qed.
-
-Lemma tree_incr_frame_depth : forall n t t',
-    tree_incr_frame n t = Some t' ->
-    (S n <= current_depth t')%nat.
-Proof.
-  induction n.
-  - intros. destruct t. inv H. auto.
-  - intros. destruct t. destruct l0.
-    inv H. simpl in *.
-    destruct (tree_incr_frame n t) eqn:?.
-    destruct t0. inv H.
-    exploit IHn. eauto. intro. simpl in *. lia.
-    inv H.
-Qed.
-
 Record sup' : Type := mksup {
-  depth : nat;
-
-  stack : tree;
+  stack : stree;
   global : list ident;
-
-  depth_le : (depth<= current_depth stack)%nat
 }.
 
 Definition sup := sup'.
 
-Program Definition sup_empty : sup := mksup O (Node nil nil) nil _.
-
-Fixpoint tree_In (p:pass) (pos:positive) (t:tree) :=
-  match p,t with
-    |nil,Node bl tl => In pos bl
-    |h::t,Node bl tl =>
-     match h with
-       |O => False
-       |S n =>
-        match nth_error (rev tl) n with
-        |None => False
-        |Some t' => tree_In t pos t'
-        end
-     end
-end.
+Program Definition sup_empty : sup := mksup empty_stree nil.
 
 Definition sup_In(b:block)(s:sup) : Prop :=
   match b with
-  | Stack pass pos => tree_In pass pos (stack s)
+  | Stack pass pos => stree_In pass pos (stack s)
   | Global id => In id (global s)
   end.
 
 Definition empty_in: forall b, ~ sup_In b sup_empty.
 Proof.
   intros. destruct b; simpl in *; try congruence.
-  destruct p; unfold tree_In; simpl; auto.
-  destruct n; auto. rewrite nth_error_nil. auto.
+  destruct p; unfold stree_In; simpl; auto.
+  destruct n; auto.
 Qed.
 
-Definition tree_dec :forall pass p tree , {tree_In pass p tree}+{~tree_In pass p tree}.
+Definition stree_Indec :forall pass p tree , {stree_In pass p tree}+{~stree_In pass p tree}.
 Proof.
   induction pass.
   - intros. simpl.
-    destruct tree2;
+    destruct tree;
     apply In_dec; apply peq.
   - intros.
-    destruct  tree2; simpl. destruct a. auto.
-    destruct (nth_error (rev l0) a).
-    + apply IHpass.
-    + auto.
+    destruct  tree; simpl.
+    destruct o.
+    + destruct (a=? Datatypes.length l0)%nat.
+    apply IHpass.
+    destruct (nth_error l0 a).
+    apply IHpass.
+    auto.
+    +
+    destruct (nth_error l0 a).
+    apply IHpass.
+    auto.
 Qed.
 
 Definition sup_dec : forall b s, {sup_In b s}+{~sup_In b s}.
 Proof.
   intros. destruct b; simpl.
-  apply tree_dec.
+  apply stree_Indec.
   apply (In_dec peq i (global s)).
 Qed.
 
 Definition fresh_block (s:sup): block :=
-  fresh_block_tree (depth s) (stack s).
-
-Definition node_In pos t :=
-  match t with
-  |Node bl tl => In pos bl
+  match next_block_stree (stack s) with
+    |(pos ,path, _) =>  Stack path pos
   end.
 
-Lemma find_in : forall n t p node pos,
-    find_right_node n t = Some (p,node) ->
-    tree_In p pos t <-> node_In pos node.
+Lemma stree_freshness : forall p pos t t', next_block_stree t = (pos,p,t')
+  -> ~ stree_In p pos t.
 Proof.
-  induction n.
-  - intros. destruct t; inv H; reflexivity.
-  - intros. destruct t. destruct l0.
-    simpl in H. inv H.
-    simpl in *. destruct (find_right_node n t) eqn:?.
+  induction p.
+  - intros. destruct t. simpl in *.
+    destruct o.
+    destruct (next_block_stree s).
+    destruct p. inv H.
+    inv H. apply fresh_notin.
+  - intros. destruct t. simpl in *.
+    destruct o.
+    destruct (next_block_stree s) eqn:?.
     destruct p0. inv H.
-    simpl. rewrite nth_error_app2.
-    rewrite rev_length.
-    rewrite Nat.sub_diag. simpl.
-    eapply IHn. auto.  rewrite rev_length. lia.
+    rewrite <- beq_nat_refl. eauto.
     inv H.
 Qed.
 
 Theorem freshness: forall s, ~sup_In (fresh_block s) s.
 Proof.
-  intros. unfold sup_In. simpl. unfold fresh_block.
-  unfold fresh_block_tree.
-  generalize (depth_le s). intros.
-  apply depth_find in H. destruct H as (pass0&node&H1).
-  rewrite H1.
-  intro. eapply find_in in H; eauto.
-  unfold node_In in H. unfold fresh_pos_node in H.
-  destruct node.
-  apply Lessthan in H. unfold fresh_pos in H.
-  extlia.
+  intros. unfold sup_In. simpl.
+  unfold fresh_block.
+  destruct (next_block_stree) eqn:?.
+  destruct p.
+  eapply stree_freshness; eauto.
 Qed.
 
+Definition sup_incr (s:sup):sup :=
+  let (pp,t') := next_block_stree (stack s) in
+  mksup t' (global s).
 
-Program Definition sup_incr_frame (s:sup) : sup :=
-  match tree_incr_frame (depth s) (stack s) with
-  |Some t' => (mksup (S(depth s)) (t') (global s) _)
-  |None => sup_empty
-  end.
-Next Obligation.
-  eapply tree_incr_frame_depth. eauto.
-Qed.
-
-Program Definition sup_free_frame (s:sup) : option sup:=
-  match (depth s) with
-    |O => None
-    |S n => Some(mksup (n)
-                    (stack s) (global s) _)
-  end.
-Next Obligation.
-  generalize (depth_le s).
-  intros. lia.
-Qed.
-
-Program Definition sup_incr (s:sup):sup :=
-  match tree_incr_block (depth s) (stack s) with
-    |Some t' => mksup (depth s) (t') (global s) _
-    |None => sup_empty
-  end.
-Next Obligation.
-  exploit tree_incr_block_depth; eauto.
-  intro. rewrite <- H. apply depth_le.
-Qed.
-
-Inductive t: nat -> Set :=
-| t_S: forall (n: nat), t (S n).
-
-Goal forall (n: nat) (p: t (S n)), p = t_S n.
-
-intros.
-refine (
-    match p with
-    | t_S n => _
-    end
-  ).
-auto.
-Qed.
-
-Theorem sup_incr_frame_in : forall s b, sup_In b (sup_incr_frame s) <-> sup_In b s.
+Lemma next_block_stree_in : forall path pos t t' path' pos',
+        next_block_stree t = (pos,path,t') ->
+        stree_In path' pos' t' <->
+        (Stack path' pos' = Stack path pos
+        \/ stree_In path' pos' t).
 Proof.
-  intros.
-(*  exploit depth_find. apply (depth_le s).
-  intros (pass&node&H1).
-  exploit find_incr_frame. eauto.
-  intros (t''&H2). symmetry in H2. *)
-  unfold sup_incr_frame.
-  Admitted.
-(*  destruct (tree_incr_frame (depth s) (stack s)) eqn:?.
-  - simpl in *.  rewrite Heqo.
+  induction path.
+  - intros.
+    destruct t. simpl in *.
+    destruct o.
+    destruct (next_block_stree s) eqn:?.
+    destruct p. inv H. inv H.
+    destruct path'; simpl.
+    split.
+    intros [H|H]. left.  rewrite H. auto. auto.
+    intros [H|H]. left.  inv H. auto. auto.
+    destruct (nth_error l0 n).
+    split. intro. auto. intro. inv H. inv H0. auto.
+    split. intro. inv H. intros [H|H]; inv H.
+  - intros.
+    destruct path'.
+    +  simpl. destruct t. destruct o.
+      * simpl in H.
+        destruct (next_block_stree s) eqn:?.
+        destruct p. inv H.
+        split. intro. auto. intros [H|H]. inv H. auto.
+      * inv H.
+    + destruct t. destruct o.
+      * simpl in H.
+        destruct (next_block_stree s) eqn:?.
+        destruct p. inv H.
+        simpl.
+        destruct (n=? Datatypes.length l0)%nat eqn:?.
+        eapply IHpath in Heqp.
+        split. intro. apply Heqp in H. destruct H.
+        inv H. left. apply beq_nat_true in Heqb. subst.
+        auto. auto.
+        intros [H|H]. inv H. apply Heqp.
+        left. auto. apply Heqp. auto.
+        destruct (nth_error l0 n).
+        split. auto. intros [H|H].
+        inv H. apply beq_nat_false in Heqb. congruence.
+        auto.
+        split. auto. intros [H|H]. inv H. apply beq_nat_false in Heqb.
+        congruence. auto.
+      * inv H.
+Qed.
 
- refine (
-    match tree_incr_frame (depth s) (stack s) with
-    | Some t' => _
-    | None => _ 
-    end
-  ).
- - admit.
- - intros.
-  intros. unfold sup_incr_frame.
-  generalize (tree_incr_frame (depth s) (stack s)).
-  *)
+Theorem sup_incr_in : forall s b',
+    sup_In b' (sup_incr s) <-> b' = (fresh_block s) \/ sup_In b' s.
+Proof.
+  intros. unfold sup_In. destruct b'.
+  - unfold sup_incr. unfold fresh_block.
+    destruct (next_block_stree) eqn:?. simpl.
+    destruct p1.
+    apply next_block_stree_in. auto.
+  - unfold sup_incr. unfold fresh_block.
+    destruct (next_block_stree). simpl.
+    destruct p. split. auto. intros [H|H].
+    inv H. auto.
+Qed.
 
+Definition sup_incr_frame (s:sup): sup :=
+  let (t',p) := next_stree (stack s) in
+  mksup t' (global s).
 
-Theorem sup_free_frame_in : forall s b s', sup_free_frame s = Some s' ->
+Lemma next_stree_in : forall p p' t t' pos,
+    next_stree t = (t',p') ->
+    stree_In p pos t <-> stree_In p pos t'.
+Proof.
+  induction p.
+  - intros. destruct t. destruct o.
+    simpl in H. destruct (next_stree s). inv H.
+    simpl. reflexivity.
+    simpl in H. inv H.
+    simpl. reflexivity.
+  - intros. destruct t. destruct o.
+    * simpl in H. destruct (next_stree s) eqn:?. inv H.
+      eapply IHp in Heqp0.
+      simpl.
+      destruct (a =? Datatypes.length l0)%nat. eauto.
+      destruct (nth_error l0 a). reflexivity. split; auto.
+    * simpl in H. inv H. simpl.
+      destruct (a =? Datatypes.length l0)%nat eqn:H.
+      assert (nth_error l0 a = None).
+      apply nth_error_None. apply beq_nat_true in H.
+      subst. lia. rewrite H0. destruct p.
+      simpl. reflexivity. simpl. destruct n; reflexivity.
+      destruct (nth_error l0 a); reflexivity.
+Qed.
+
+Theorem sup_incr_frame_in : forall s b, sup_In b s <-> sup_In b (sup_incr_frame s).
+Proof.
+  intros. unfold sup_In. destruct b.
+  - unfold sup_incr_frame.
+    destruct (next_stree (stack s)) eqn:?.
+    simpl.
+    eapply next_stree_in. eauto.
+  - unfold sup_incr_frame.
+    destruct (next_stree (stack s)).
+    reflexivity.
+Qed.
+
+Definition sup_return_frame (s:sup) : option sup :=
+  match return_stree (stack s) with
+    |Some (t',p) => Some (mksup t' (global s))
+    |None => None
+  end.
+
+Lemma return_stree_in : forall path s s' p pos,
+    return_stree s = Some (s',path) ->
+    stree_In p pos s <-> stree_In p pos s'.
+Proof.
+  induction path.
+  - intros. destruct s. destruct o.
+    inv H. destruct (return_stree s).
+    destruct p0. inv H1. inv H1.
+    simpl in H. inv H.
+  - intros. destruct s. destruct o.
+    *
+    inv H. destruct (return_stree s) eqn:?.
+    destruct p0. inv H1.
+    destruct p; simpl. reflexivity.
+    destruct (n =? Datatypes.length l0)%nat eqn:H.
+    eapply IHpath. auto.
+    destruct (nth_error l0 n); reflexivity.
+    inv H1.
+    destruct p; simpl. reflexivity.
+    destruct (n =? Datatypes.length l0)%nat eqn:H.
+    apply beq_nat_true in H. subst.
+    rewrite nth_error_app2.
+    rewrite Nat.sub_diag.
+    simpl. reflexivity. lia.
+    destruct (n <? Datatypes.length l0)%nat eqn:H1.
+    rewrite nth_error_app1.
+    destruct (nth_error l0 n); reflexivity.
+    apply Nat.ltb_lt. auto.
+    apply Nat.ltb_ge in H1.
+    apply Nat.eqb_neq in H.
+    assert (nth_error (l0++[s]) n = None).
+    apply nth_error_None.
+    rewrite app_length. simpl. lia.
+    rewrite H0.
+    assert (nth_error l0 n = None).
+    apply nth_error_None.
+    lia.
+    rewrite H2.
+    reflexivity.
+    * inv H.
+Qed.
+
+Theorem sup_return_frame_in : forall s b s',
+    sup_return_frame s = Some (s') ->
       sup_In b s <-> sup_In b s'.
 Proof.
   intros.
-  destruct s. destruct depth0.
+  destruct b; unfold sup_return_frame in H;
+  destruct (return_stree (stack s)) eqn:?.
+  - destruct p1. inv H.
+    simpl.
+    eapply return_stree_in; eauto.
   - inv H.
-  - inv H. destruct b.
-    + simpl. reflexivity.
-    + simpl. reflexivity.
+  - destruct p. inv H. reflexivity.
+  - inv H.
 Qed.
 
-
-Theorem sup_incr_in : forall s b', sup_In b' (sup_incr s) <-> b' = (fresh_block s) \/ sup_In b' s.
-Proof.
-  Admitted.
-(*
-  split; destruct b';auto.
-  - intros H. simpl in H.
-    unfold sup_incr in H.
-    destruct (tree_incr_block (depth s)(stack s)).
-
-*)
 Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
 
 Theorem sup_incr_in1 : forall s, sup_In (fresh_block s) (sup_incr s).
@@ -467,7 +471,7 @@ Theorem sup_incr_in2 : forall s, sup_include s (sup_incr s).
 Proof. intros. intro. intro. apply sup_incr_in. right. auto. Qed.
 
 Definition sup_incr_glob (i:ident) (s:sup) : sup :=
- mksup (depth s) (stack s) (i::(global s)) (depth_le s).
+ mksup (stack s) (i::(global s)).
 
 Theorem sup_incr_glob_in :  forall i s b,
     sup_In b (sup_incr_glob i s) <-> b = (Global i) \/ sup_In b s.
@@ -827,10 +831,31 @@ Program Definition alloc_frame (m:mem) :=
 Next Obligation.
   apply access_max.
 Qed.
-
 Next Obligation.
   apply nextblock_noaccess.
-  intro. apply H. apply sup_incr_frame_in. auto.
+  intro. apply H. apply sup_incr_frame_in in H0. auto.
+Qed.
+Next Obligation.
+  apply contents_default.
+Qed.
+
+Program Definition return_frame (m:mem) : option mem :=
+  match (sup_return_frame (support m)) with
+    |Some s' =>
+     Some (mkmem (m.(mem_contents))
+                 (m.(mem_access))
+                 s'
+                 _ _ _)
+    |None => None
+  end.
+Next Obligation.
+  apply access_max.
+Qed.
+Next Obligation.
+  apply nextblock_noaccess.
+  symmetry in Heq_anonymous.
+  eapply sup_return_frame_in in Heq_anonymous.
+  intro. apply H. apply Heq_anonymous. auto.
 Qed.
 Next Obligation.
   apply contents_default.
@@ -941,115 +966,6 @@ Next Obligation.
 Qed.
 Next Obligation.
   apply contents_default.
-Qed.
-
-Definition access_map :Type := NMap.t (Z -> perm_kind -> option permission).
-Definition free_block (ma : access_map)(p:pass)(pos:positive) : access_map :=
-        (NMap.set _ (Stack p pos) (fun _ _ => None) ma).
-Fixpoint free_block_list (ma: access_map )(p:pass) (l:list positive) {struct l} : access_map :=
-  match l with
-    | nil => ma
-    | pos::l' => free_block_list (free_block ma p pos) p l'
-  end.
-
-Lemma free_block_list_in1 : forall l ma ma' p ofs k b,
-    free_block_list ma p l = ma' ->
-    ma # b ofs k = None ->
-    ma' #b ofs k = None.
-Proof.
-  induction l; intros.
-  - inv H. auto.
-  - eapply IHl; eauto.
-    unfold free_block. destruct (eq_block b (Stack p a)).
-    + rewrite NMap.gsspec. rewrite pred_dec_true. auto. auto.
-    + assert (((NMap.set _ (Stack p a) (fun _ _ =>None) ma) # b) = (ma # b)).
-      apply NMap.gso. apply n. rewrite H1. auto.
-Qed.
-
-Lemma free_block_list_in : forall l ma p pos b ofs k,
-    (b = Stack p pos /\ In pos l) ->
-    (free_block_list ma p l)#b ofs k = None.
-Proof.
-  Admitted.
-
-Lemma free_block_list_notin : forall l ma p pos b ofs k,
-    ~ (b = Stack p pos /\ In pos l) ->
-    (free_block_list ma p l)#b ofs k = ma#b ofs k.
-Proof.
-  Admitted.
-
-Program Definition free_frame (m:mem) : option mem :=
-  match (cpass (support m)) with
-    |hd :: tl =>
-     Some (mkmem (m.(mem_contents))
-                 (free_block_list (m.(mem_access)) (hd::tl)
-                                  (PassMap.get _ (hd::tl)(stack m.(support))))
-                 (mksup tl (PassMap.set _ (hd::tl) nil (stack m.(support))) (global m.(support)))
-                 _ _ _)
-    |nil => None
-  end.
-(*
-Next Obligation.
-  destruct (eq_pass p (hd::tl)).
-  rewrite e in H. rewrite Heq_anonymous in H. setoid_rewrite PassMap.gss in H.
-  congruence.
-  setoid_rewrite PassMap.gso in H. apply pass_in in H.
-  rewrite <- Heq_anonymous in H.
-  destruct H. destruct x. inv H. simpl in H0. congruence.
-  simpl in H. inv H. exists x. auto. congruence.
-Qed.
-*)
-Next Obligation.
-  set (l := PassMap.get _ (hd::tl)(stack (support m))).
-  destruct b.
-  - destruct (eq_pass p (hd::tl)).
-    destruct (In_dec peq p0 l).
-    erewrite ! free_block_list_in; eauto. constructor.
-    instantiate (1:= p0). subst. auto.
-    instantiate (1:= p0). subst. auto.
-    erewrite free_block_list_notin.
-    erewrite free_block_list_notin.
-    apply access_max.
-    instantiate (1:= p0). subst. intro. apply n. destruct H. auto.
-    instantiate (1:= p0). subst. intro. apply n. destruct H. auto.
-    erewrite free_block_list_notin.
-    erewrite free_block_list_notin.
-    apply access_max.
-    instantiate (1:= p0). subst. intro. inv H. inv H0. congruence.
-    instantiate (1:= p0). subst. intro. inv H. inv H0. congruence.
-  - erewrite free_block_list_notin.
-    erewrite free_block_list_notin.
-    apply access_max.
-    instantiate (1:= 1%positive). intro. inv H. inv H0.
-    instantiate (1:= 1%positive). intro. inv H. inv H0.
-Qed.
-Next Obligation.
-  set (l := PassMap.get _ (hd::tl)(stack (support m))).
-  destruct b.
-  - destruct (eq_pass p (hd::tl)).
-    destruct (In_dec peq p0 l).
-    erewrite ! free_block_list_in; eauto. constructor.
-    instantiate (1:= p0). subst. auto. auto.
-
-    eapply free_block_list_in1; eauto. apply nextblock_noaccess.
-    unfold sup_In in *. simpl in *. subst. auto.
-    eapply free_block_list_in1; eauto. apply nextblock_noaccess.
-    unfold sup_In in *. simpl in *.
-    setoid_rewrite PassMap.gso in H. auto. auto.
-  - erewrite free_block_list_in1. auto. eauto. auto.
-    apply nextblock_noaccess.
-    unfold sup_In in *. simpl in *. auto.
-Qed.
-Next Obligation.
-  apply contents_default.
-Qed.
-
-Lemma aaa : forall m m',
-    free_frame m = Some m' -> (cpass (support m)) <> nil.
-Proof.
-  intros.
-  unfold free_frame in H. destruct (cpass (support m)). inv H.
-  congruence.
 Qed.
 
 Definition free (m: mem) (b: block) (lo hi: Z): option mem :=

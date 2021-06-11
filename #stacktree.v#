@@ -74,3 +74,9 @@ Fixpoint tree_In (p:pass) (t:stree) : Prop :=
   match p,t with
     |nil, Node l None =>
     |
+
+
+
+
+
+
