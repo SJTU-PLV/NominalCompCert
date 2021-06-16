@@ -86,9 +86,6 @@ COMMON=Errors.v AST.v Linking.v \
 
 BACKEND=\
   Cminor.v Cminortyping.v Op.v CminorSel.v \
-  SelectOp.v SelectDiv.v SplitLong.v SelectLong.v Selection.v \
-  SelectOpproof.v SelectDivproof.v SplitLongproof.v \
-  SelectLongproof.v Selectionproof.v \
   Registers.v RTL.v \
   Unusedglob.v Unusedglobproof.v \
   Machregs.v Locations.v Conventions1.v Conventions.v LTL.v \
