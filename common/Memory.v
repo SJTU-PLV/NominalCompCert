@@ -132,42 +132,35 @@ Proof.
 Qed.
 
 (*Declare Module Sup: SUP. *)
+
 Module Sup.
 Import List.ListNotations.
-Inductive stree : Set :=
-  |Node : (list positive)  -> list stree -> option stree -> stree.
 
-Definition empty_stree := Node [] [] None.
+(* true for Stack, false for External  *)
+Inductive stree : Set :=
+  |Node : bool -> (list positive)  -> list stree -> option stree -> stree.
+
+Definition empty_stree := Node true [] [] None.
 
 (** Next tree and path *)
 
 Fixpoint next_stree (t: stree) : (stree * path) :=
   match t with
-  | Node bl l None =>
+  | Node b bl l None =>
     let idx := length l in
-    (Node bl l (Some empty_stree), [idx])
-  | Node bl l (Some t') =>
+    (Node b bl l (Some empty_stree), [idx])
+  | Node b bl l (Some t') =>
     let (t'', p) := next_stree t' in
-    (Node bl l (Some t''), (length l) :: p)
+    (Node b bl l (Some t''), (length l) :: p)
   end.
-(*
-Fixpoint fresh_block_stree (t:stree) : (positive * path) :=
+
+Fixpoint next_block_stree (t:stree) : (bool * positive * path * stree) :=
   match t with
-  | Node bl l None =>
-    let idx := length l in
-    (fresh_pos bl,nil)
-  | Node bl l (Some t') =>
-    let (pos,p) := fresh_block_stree t' in
-    (pos,(length l)::p)
-  end.
-*)
-Fixpoint next_block_stree (t:stree) : (positive * path * stree) :=
-  match t with
-  |Node bl l None =>
-   ((fresh_pos bl), nil, Node ((fresh_pos bl)::bl) l None)
-  |Node bl l (Some t') =>
+  |Node b bl l None =>
+   (b, (fresh_pos bl), nil, Node b ((fresh_pos bl)::bl) l None)
+  |Node b bl l (Some t') =>
    match next_block_stree t' with (pos,path,t'')
-    => (pos, (length l)::path, Node bl l (Some t''))
+    => (pos, (length l)::path, Node b bl l (Some t''))
    end
   end.
 
@@ -176,43 +169,32 @@ Fixpoint next_block_stree (t:stree) : (positive * path * stree) :=
 (** path for inductive proof, maybe there is another solution? *)
 Fixpoint return_stree (t: stree) : option (stree * path):=
   match t with
-  | Node bl l None =>
+  | Node _ bl l None =>
     None
-  | Node bl l (Some t) =>
+  | Node b bl l (Some t) =>
     let idx := length l in
     match return_stree t with
-    | None => Some ((Node bl (l ++ [t]) None),[idx])
-    | Some (t',p') => Some ((Node bl l (Some t')),(idx::p'))
+    | None => Some ((Node b bl (l ++ [t]) None),[idx])
+    | Some (t',p') => Some ((Node b bl l (Some t')),(idx::p'))
     end
   end.
 
-Fixpoint stree_In (p:path) (pos:positive) (t:stree) :=
+Fixpoint stree_In (b:bool)(p:path) (pos:positive) (t:stree) :=
   match p,t with
-    |nil , Node bl dt _ => In pos bl
-    |n::p' , Node bl dt None =>
+    |nil , Node b' bl dt _ => b = b' /\ In pos bl
+    |n::p' , Node b' bl dt None =>
      match nth_error dt n with
-       |Some t' => stree_In p' pos t'
+       |Some t' => stree_In b p' pos t'
        |None => False
      end
-    |n::p',Node bl dt (Some t') =>
-     if (n =? (length dt))%nat then stree_In p' pos t' else
+    |n::p',Node b' bl dt (Some t') =>
+     if (n =? (length dt))%nat then stree_In b p' pos t' else
      match nth_error dt n with
-       |Some t'' => stree_In p' pos t''
+       |Some t'' => stree_In b p' pos t''
        |None => False
      end
   end.
 
-(*
-Definition tree0 := Node nil nil.
-Definition tree1 := Node nil ((Node nil nil) :: (Node nil nil)::nil).
-
-Definition tree3 := Node nil ((
-                               Node nil (tree1::tree0::tree1::tree0::nil))::nil).
-Compute find_right_node 3 tree3. *)
-Definition fresh_pos_node (t:stree) : positive :=
-  match t with
-    |Node bl _ _ => fresh_pos bl
-  end.
 Record sup' : Type := mksup {
   stack : stree;
   global : list ident;
@@ -224,34 +206,39 @@ Program Definition sup_empty : sup := mksup empty_stree nil.
 
 Definition sup_In(b:block)(s:sup) : Prop :=
   match b with
-  | Stack pass pos => stree_In pass pos (stack s)
+  | Stack f path pos => stree_In f path pos (stack s)
   | Global id => In id (global s)
   end.
 
 Definition empty_in: forall b, ~ sup_In b sup_empty.
 Proof.
   intros. destruct b; simpl in *; try congruence.
-  destruct p; unfold stree_In; simpl; auto.
+  destruct p; unfold stree_In; simpl; auto. intro. inv H. auto.
   destruct n; auto.
 Qed.
 
-Definition stree_Indec :forall pass p tree , {stree_In pass p tree}+{~stree_In pass p tree}.
+Definition stree_Indec :forall b path p tree , {stree_In b path p tree}+{~stree_In b path p tree}.
 Proof.
-  induction pass.
+  induction path.
   - intros. simpl.
-    destruct tree;
-    apply In_dec; apply peq.
+    destruct tree.
+    destruct (eqb b b0) eqn:?.
+    destruct (In_dec peq p l).
+    apply eqb_prop in Heqb1. auto.
+    right. intro. inv H. eauto.
+    right. intro. inv H.
+    rewrite eqb_reflx in Heqb1. congruence.
   - intros.
     destruct  tree; simpl.
     destruct o.
     + destruct (a=? Datatypes.length l0)%nat.
-    apply IHpass.
+    apply IHpath.
     destruct (nth_error l0 a).
-    apply IHpass.
+    apply IHpath.
     auto.
     +
     destruct (nth_error l0 a).
-    apply IHpass.
+    apply IHpath.
     auto.
 Qed.
 
@@ -264,18 +251,19 @@ Qed.
 
 Definition fresh_block (s:sup): block :=
   match next_block_stree (stack s) with
-    |(pos ,path, _) =>  Stack path pos
+    |(f,pos,path,_) =>  Stack f path pos
   end.
 
-Lemma stree_freshness : forall p pos t t', next_block_stree t = (pos,p,t')
-  -> ~ stree_In p pos t.
+Lemma stree_freshness : forall b p pos t t', next_block_stree t = (b,pos,p,t')
+  -> ~ stree_In b p pos t.
 Proof.
   induction p.
   - intros. destruct t. simpl in *.
     destruct o.
     destruct (next_block_stree s).
     destruct p. inv H.
-    inv H. apply fresh_notin.
+    inv H.
+    intro. inv H. apply fresh_notin in H1. auto.
   - intros. destruct t. simpl in *.
     destruct o.
     destruct (next_block_stree s) eqn:?.
@@ -290,6 +278,7 @@ Proof.
   unfold fresh_block.
   destruct (next_block_stree) eqn:?.
   destruct p.
+  destruct p.
   eapply stree_freshness; eauto.
 Qed.
 
@@ -297,11 +286,11 @@ Definition sup_incr (s:sup):sup :=
   let (pp,t') := next_block_stree (stack s) in
   mksup t' (global s).
 
-Lemma next_block_stree_in : forall path pos t t' path' pos',
-        next_block_stree t = (pos,path,t') ->
-        stree_In path' pos' t' <->
-        (Stack path' pos' = Stack path pos
-        \/ stree_In path' pos' t).
+Lemma next_block_stree_in : forall path pos t t' path' pos' b b',
+        next_block_stree t = (b,pos,path,t') ->
+        stree_In b' path' pos' t' <->
+        ( (b',path',pos') = (b,path,pos)
+        \/ stree_In b' path' pos' t).
 Proof.
   induction path.
   - intros.
@@ -311,8 +300,8 @@ Proof.
     destruct p. inv H. inv H.
     destruct path'; simpl.
     split.
-    intros [H|H]. left.  rewrite H. auto. auto.
-    intros [H|H]. left.  inv H. auto. auto.
+    intros [H1[H|H]]. left. subst. auto. right. auto.
+    intros [H|[H1 H2]]. inv H. auto. auto.
     destruct (nth_error l0 n).
     split. intro. auto. intro. inv H. inv H0. auto.
     split. intro. inv H. intros [H|H]; inv H.
@@ -332,15 +321,15 @@ Proof.
         destruct (n=? Datatypes.length l0)%nat eqn:?.
         eapply IHpath in Heqp.
         split. intro. apply Heqp in H. destruct H.
-        inv H. left. apply beq_nat_true in Heqb. subst.
+        inv H. left. apply beq_nat_true in Heqb1. subst.
         auto. auto.
         intros [H|H]. inv H. apply Heqp.
         left. auto. apply Heqp. auto.
         destruct (nth_error l0 n).
         split. auto. intros [H|H].
-        inv H. apply beq_nat_false in Heqb. congruence.
+        inv H. apply beq_nat_false in Heqb1. congruence.
         auto.
-        split. auto. intros [H|H]. inv H. apply beq_nat_false in Heqb.
+        split. auto. intros [H|H]. inv H. apply beq_nat_false in Heqb1.
         congruence. auto.
       * inv H.
 Qed.
@@ -351,21 +340,25 @@ Proof.
   intros. unfold sup_In. destruct b'.
   - unfold sup_incr. unfold fresh_block.
     destruct (next_block_stree) eqn:?. simpl.
-    destruct p1.
-    apply next_block_stree_in. auto.
+    destruct p1. destruct p1.
+    eapply next_block_stree_in in Heqp1.
+    split. intro. apply Heqp1 in H. destruct H.
+    inv H. auto. auto.
+    intro. apply Heqp1. destruct H.
+    inv H. auto. auto.
   - unfold sup_incr. unfold fresh_block.
-    destruct (next_block_stree). simpl.
-    destruct p. split. auto. intros [H|H].
-    inv H. auto.
+    destruct (next_block_stree) eqn:?. simpl.
+    destruct p. destruct p. split.
+    auto. intros [H|H]. inv H. auto.
 Qed.
 
 Definition sup_incr_frame (s:sup): sup :=
   let (t',p) := next_stree (stack s) in
   mksup t' (global s).
 
-Lemma next_stree_in : forall p p' t t' pos,
+Lemma next_stree_in : forall p p' t t' pos b,
     next_stree t = (t',p') ->
-    stree_In p pos t <-> stree_In p pos t'.
+    stree_In b p pos t <-> stree_In b p pos t'.
 Proof.
   induction p.
   - intros. destruct t. destruct o.
@@ -384,7 +377,8 @@ Proof.
       assert (nth_error l0 a = None).
       apply nth_error_None. apply beq_nat_true in H.
       subst. lia. rewrite H0. destruct p.
-      simpl. reflexivity. simpl. destruct n; reflexivity.
+      simpl. split. auto. intros [H1 H2]. congruence.
+      simpl. destruct n; reflexivity.
       destruct (nth_error l0 a); reflexivity.
 Qed.
 
@@ -406,9 +400,9 @@ Definition sup_return_frame (s:sup) : option sup :=
     |None => None
   end.
 
-Lemma return_stree_in : forall path s s' p pos,
+Lemma return_stree_in : forall path s s' p pos b,
     return_stree s = Some (s',path) ->
-    stree_In p pos s <-> stree_In p pos s'.
+    stree_In b p pos s <-> stree_In b p pos s'.
 Proof.
   induction path.
   - intros. destruct s. destruct o.

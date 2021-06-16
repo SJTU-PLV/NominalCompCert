@@ -513,15 +513,17 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sswitch islong a cases default) k sp e m)
         E0 (State f (Sexit (switch_target n default cases)) k sp e m)
 
-  | step_return_0: forall f k sp e m m',
+  | step_return_0: forall f k sp e m m' m'',
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       step (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
-        E0 (Returnstate Vundef (call_cont k) m')
-  | step_return_1: forall f a k sp e m v m',
+        E0 (Returnstate Vundef (call_cont k) m'')
+  | step_return_1: forall f a k sp e m v m' m'',
       eval_expr (Vptr sp Ptrofs.zero) e m a v ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       step (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
-        E0 (Returnstate v (call_cont k) m')
+        E0 (Returnstate v (call_cont k) m'')
 
   | step_label: forall f lbl s k sp e m,
       step (State f (Slabel lbl s) k sp e m)
@@ -532,11 +534,12 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sgoto lbl) k sp e m)
         E0 (State f s' k' sp e m)
 
-  | step_internal_function: forall f vargs k m m' sp e,
+  | step_internal_function: forall f vargs k m m' m'' sp e,
       Mem.alloc m 0 f.(fn_stackspace) = (m', sp) ->
+      Mem.alloc_frame m' = m'' ->
       set_locals f.(fn_vars) (set_params vargs f.(fn_params)) = e ->
       step (Callstate (Internal f) vargs k m)
-        E0 (State f f.(fn_body) k (Vptr sp Ptrofs.zero) e m')
+        E0 (State f f.(fn_body) k (Vptr sp Ptrofs.zero) e m'')
   | step_external_function: forall ef vargs k m t vres m',
       external_call ef ge vargs m t vres m' ->
       step (Callstate (External ef) vargs k m)
@@ -655,7 +658,7 @@ Proof.
   inv H; inv H0; auto.
 Qed.
 
-(** * Alternate operational semantics (big-step) *)
+(** * Alternate operational semantics (big-step)
 
 (** We now define another semantics for Cminor without [goto] that follows
   the ``big-step'' style of semantics, also known as natural semantics.
@@ -1244,3 +1247,5 @@ Proof.
 Qed.
 
 End BIGSTEP_TO_TRANSITION.
+
+*)

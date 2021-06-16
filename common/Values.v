@@ -32,11 +32,21 @@ End BLOCK.
 Definition path := list nat.
 
 Lemma nat_eq: forall n1 n2 :nat, {n1=n2} + {n1<>n2}.
+Proof.
   intros.
   destruct (Nat.eqb n1 n2) eqn:?.
   apply Nat.eqb_eq in Heqb. left. auto.
   apply Nat.eqb_neq in Heqb. right. auto.
 Qed.
+
+Lemma beq : forall b1 b2:bool, {b1=b2}+{b1<>b2}.
+Proof.
+  intros.
+  destruct (eqb b1 b2) eqn:?.
+  rewrite eqb_true_iff in Heqb. auto.
+  rewrite eqb_false_iff in Heqb. auto.
+Qed.
+
 Definition eq_path := list_eq_dec nat_eq.
 (*
 Definition Subpass (p1 p2:pass): Prop :=
@@ -59,7 +69,7 @@ Proof.
 Qed.
 *)
 Inductive block' :=
-  |Stack  : path -> positive -> block'
+  |Stack  : bool -> path -> positive -> block'
   |Global : ident -> block'.
 
 Module Block <: BLOCK.
@@ -68,11 +78,10 @@ Definition block := block'.
 
 Theorem eq_block : forall (x y:block),{x=y}+{x<>y}.
 Proof.
-  intros. destruct x; destruct y.
+  intros. destruct x; destruct y; try(right; congruence).
   - (destruct (eq_path p p1)); try (right; congruence).
-    destruct (peq p0 p2). left. congruence. right. congruence.
-  - right. congruence.
-  - right. congruence.
+    destruct (peq p0 p2); try (right; congruence).
+    destruct (beq b b0). left. congruence. right. congruence.
   - destruct (peq i i0). left. congruence. right. congruence.
 Qed.
 
@@ -83,7 +92,7 @@ Definition eq_block := Block.eq_block.
 
 Definition is_stack (b:block) : bool :=
   match b with
-    | Stack _ _ => true
+    | Stack _ _ _ => true
     |  _ => false
   end.
 
@@ -2279,6 +2288,38 @@ Record meminjP (P:meminj -> Prop) := mkinjP {
   minj : meminj;
   property : P minj;
 }.
+
+(*extend*)
+Definition P1 : meminj -> Prop :=
+ fun f =>  forall b, f b = Some (b,0).
+
+(*Unused*)
+Definition P2 : meminj -> Prop :=
+  fun f => forall b,
+      match b with
+      |Stack flag path pos => f b = Some (b,0)
+      |Global id =>
+       forall b' delta, f b = Some (b',delta) -> b' = Global id /\ delta =0
+              end.
+(*simpl*)
+Definition P3 : meminj -> Prop :=
+  fun f => forall b,
+      match b with
+      |Stack true path pos => forall b' delta, f b = Some (b',delta ) ->
+                                    b' = b /\ delta = 0
+      |Stack false path pos => f b = Some (b,0)
+      |Global id => f b = Some (b,0)
+              end.
+
+(*Cminorgen*)
+Definition P4 : meminj -> Prop :=
+  fun f => forall b,
+      match b with
+      |Stack true path pos => forall b' delta, f b = Some (b',delta) ->
+                                    b' = Stack true path 1
+      |Stack false path pos => f b = Some (b,0)
+      |Global id => f b = Some (b,0)
+      end.
 
 (** A memory injection defines a relation between values that is the
   identity relation, except for pointer values which are shifted
