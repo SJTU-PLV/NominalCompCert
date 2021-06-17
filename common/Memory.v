@@ -99,31 +99,37 @@ Proof.
 Qed.
 End NMap.
 
-Fixpoint find_max_pos (l: list positive) : positive :=
+Fixpoint fresh_pos (l: list positive) : positive :=
   match l with
   |nil => 1
-  |hd::tl => let m' := find_max_pos tl in
+  |hd::tl => let m' := fresh_pos tl in
              match plt hd m' with
              |left _ => m'
-             |right _ => hd
+             |right _ => hd +1
              end
   end.
-Lemma Lessthan: forall b l, In b l -> Ple b (find_max_pos l).
+
+Lemma Lessthan: forall b l, In b l -> Plt b (fresh_pos l).
 Proof.
   intros.
   induction l.
   destruct H.
   destruct H;simpl.
-  - destruct (plt a (find_max_pos l)); subst a.
-    + apply Plt_Ple. assumption.
-    + apply Ple_refl.
-  - destruct (plt a (find_max_pos l)); apply IHl in H.
+  - destruct (plt a (fresh_pos l)); subst a.
+    auto.
+    apply Pos.lt_add_r.
+  - destruct (plt a (fresh_pos l)); apply IHl in H.
     + auto.
-    + eapply Ple_trans. eauto.  apply Pos.le_nlt. apply n.
+    + eapply Plt_trans. eauto.
+      apply Pos.le_nlt in n.
+
+      apply Pos.le_lteq in n. destruct n.
+      eapply Plt_trans. eauto.
+      apply Pos.lt_add_r.
+      subst.
+      apply Pos.lt_add_r.
 Qed.
 
-
-Definition fresh_pos (p:list positive):= ((find_max_pos p)+1)%positive.
 
 Lemma fresh_notin : forall l, ~In (fresh_pos l) l.
 Proof.
@@ -142,6 +148,9 @@ Inductive stree : Set :=
 
 Definition empty_stree := Node true [] [] None.
 
+(*Inductive stree_eq (t1 t2:stree) : Prop :=
+  |stree_eq_None : forall b bl, stree_eq (Node b nil nil None) (Node b nil nil None)
+  |stree_eq_ *)
 (** Next tree and path *)
 
 Fixpoint next_stree (t: stree) : (stree * path) :=
@@ -442,9 +451,9 @@ Proof.
     * inv H.
 Qed.
 
-Theorem sup_return_frame_in : forall s b s',
+Theorem sup_return_frame_in : forall s s',
     sup_return_frame s = Some (s') ->
-      sup_In b s <-> sup_In b s'.
+    (forall b, sup_In b s <-> sup_In b s').
 Proof.
   intros.
   destruct b; unfold sup_return_frame in H;
@@ -458,6 +467,16 @@ Proof.
 Qed.
 
 Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
+
+Lemma sup_return_frame_sup_include : forall s s',
+    sup_return_frame s = Some s' ->
+    sup_include s s'.
+Proof.
+  intros.
+  intro.
+  eapply sup_return_frame_in in H.
+  apply H.
+Qed.
 
 Theorem sup_incr_in1 : forall s, sup_In (fresh_block s) (sup_incr s).
 Proof. intros. apply sup_incr_in. left. auto. Qed.
@@ -534,6 +553,20 @@ Record mem' : Type := mkmem {
 Definition mem := mem'.
 
 Definition nextblock (m:mem) := fresh_block (support m).
+
+Lemma stack_eq_nextblock : forall m1 m2,
+    stack(support m1) = stack(support m2) ->
+    nextblock m1 = nextblock m2.
+Proof.
+  intros. unfold nextblock. unfold fresh_block.
+  rewrite H. simpl. reflexivity.
+Qed.
+
+Definition empty_stack (m:mem) : Prop :=
+  match stack (support m) with
+    |Node _ _ _ None => True
+    |_ => False
+  end.
 
 Lemma mkmem_ext:
  forall cont1 cont2 acc1 acc2 sup1 sup2 a1 a2 b1 b2 c1 c2,
@@ -839,20 +872,41 @@ Program Definition return_frame (m:mem) : option mem :=
      Some (mkmem (m.(mem_contents))
                  (m.(mem_access))
                  s'
-                 _ _ _)
+                 (m.(access_max))
+                 _
+                 (m.(contents_default))
+         )
     |None => None
   end.
-Next Obligation.
-  apply access_max.
-Qed.
 Next Obligation.
   apply nextblock_noaccess.
   symmetry in Heq_anonymous.
   eapply sup_return_frame_in in Heq_anonymous.
   intro. apply H. apply Heq_anonymous. auto.
 Qed.
-Next Obligation.
-  apply contents_default.
+
+Lemma support_return_frame : forall m m',
+    return_frame m = Some m' ->
+    sup_return_frame (support m) = Some (support m').
+Proof.
+  intros. unfold return_frame in H.
+  unfold sup_return_frame in *.
+  Set Printing All.
+  destruct (return_stree (stack(support m))).
+
+Proof. Admitted.
+
+Lemma return_frame_nonempty : forall m m',
+    return_frame m = Some m' ->
+    ~ empty_stack m.
+Proof.
+  intros.
+  apply support_return_frame in H.
+  unfold sup_return_frame in H.
+  unfold empty_stack.
+  destruct ((stack(support m))).
+  destruct o. simpl in H. auto.
+  simpl in H. inv H.
 Qed.
 
 Program Definition alloc (m: mem) (lo hi: Z) :=
@@ -2690,6 +2744,7 @@ Local Hint Resolve valid_block_free_1 valid_block_free_2
              perm_free_1 perm_free_2 perm_free_3
              valid_access_free_1 valid_access_free_inv_1: mem.
 
+
 (** ** Properties related to [drop_perm] *)
 
 Theorem range_perm_drop_1:
@@ -4255,6 +4310,7 @@ Proof.
   intuition eauto using perm_storebytes_1, perm_storebytes_2.
 Qed.
 
+
 Theorem storebytes_outside_inject:
   forall f m1 m2 b ofs bytes2 m2',
   inject f m1 m2 ->
@@ -4625,6 +4681,67 @@ Proof.
   eapply free_range_perm; eauto. lia.
   intros [A|A]. congruence. lia.
 Qed.
+
+Theorem alloc_parallel_stackeq :
+  forall m1 m2 lo1 hi1 lo2 hi2 b1 b2 m1' m2',
+    alloc m1 lo1 hi1 = (m1',b1) ->
+    alloc m2 lo2 hi2 = (m2',b2) ->
+    stack(support m1) = stack(support m2) ->
+    stack(support m1') = stack (support m2')
+    /\ b1 = b2.
+Proof.
+  intros. inv H. inv H0.
+  simpl. unfold sup_incr. rewrite H1. simpl. split.
+  destruct (next_block_stree (stack(support m2))).
+  reflexivity. apply stack_eq_nextblock.
+  auto.
+Qed.
+
+Theorem alloc_frame_parallel_stackeq :
+  forall m1 m2,
+    stack (support m1) = stack (support m2) ->
+    stack (support (alloc_frame m1)) = stack (support (alloc_frame m2)).
+Proof.
+  intros.
+  unfold alloc_frame. simpl. unfold sup_incr_frame.
+  rewrite H. destruct (next_stree (stack (support m2))).
+  reflexivity.
+Qed.
+
+Theorem return_frame_parallel_stackeq :
+  forall m1 m2 m1' m2',
+    return_frame m1 = Some m1' ->
+    return_frame m2 = Some m2' ->
+    stack (support m1) = stack (support m2) ->
+    stack (support m1') = stack (support m2').
+Proof.
+  intros.
+  apply support_return_frame in H.
+  apply support_return_frame in H0.
+  unfold sup_return_frame in *.
+  rewrite H1 in H.
+  destruct (return_stree (stack(support m2))).
+  destruct p. inv H. inv H0. reflexivity.
+  inv H.
+Qed.
+
+Theorem return_frame_parallel_inject :
+  forall f m1 m2 m1' b b' delta,
+    inject f m1 m2 ->
+    return_frame m1 = Some m1' ->
+    f b = Some (b',delta) ->
+    ~ empty_stack m2 ->
+    exists m2',
+      return_frame m2 = Some m2' /\ inject f m1' m2'.
+Proof.
+  Admitted.
+
+Theorem alloc_frame_parallel_inject :
+  forall f m1 m2,
+    inject f m1 m2 ->
+    inject f (alloc_frame m1) (alloc_frame m2).
+Proof.
+  Admitted.
 
 Lemma drop_outside_inject: forall f m1 m2 b lo hi p m2',
   inject f m1 m2 ->

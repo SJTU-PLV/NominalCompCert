@@ -1291,6 +1291,84 @@ End INITMEM.
 Definition init_mem (p: program F V) :=
   alloc_globals (globalenv p) Mem.empty p.(prog_defs).
 
+Lemma store_init_data_stack:
+  forall l ge m m' b ofs,
+    store_init_data ge m b ofs l = Some m' ->
+    Mem.stack (Mem.support m') = Mem.stack (Mem.support m).
+Proof.
+  destruct l; simpl; intros;
+  try now (erewrite Mem.support_store; eauto).
+  inv H; auto.
+  destruct (find_symbol ge i); try discriminate.
+  erewrite Mem.support_store; eauto.
+Qed.
+
+Lemma store_init_data_list_stack:
+  forall l ge m m' b ofs,
+    store_init_data_list ge m b ofs l = Some m' ->
+    Mem.stack (Mem.support m') = Mem.stack (Mem.support m).
+Proof.
+  induction l; simpl; intros; eauto.
+  inv H; auto.
+  destruct store_init_data eqn:?; try discriminate.
+  erewrite IHl. 2: eauto.
+  eapply store_init_data_stack; eauto.
+Qed.
+
+Lemma store_zeros_stack:
+  forall m b lo hi m',
+    store_zeros m b lo hi = Some m' ->
+    Mem.stack (Mem.support m') = Mem.stack (Mem.support m).
+Proof.
+  intros.
+  revert H.
+  eapply store_zeros_ind; simpl; intros.
+  inv H; auto.
+  erewrite H, Mem.support_store; eauto.
+  inv H.
+Qed.
+
+Lemma alloc_global_stack:
+  forall l ge m m',
+    alloc_global ge m l = Some m' ->
+    Mem.stack (Mem.support m') = Mem.stack (Mem.support m).
+Proof.
+  destruct l; simpl; intros.
+  destruct g.
+  destruct (Mem.alloc m 0 1) eqn:?; try discriminate.
+  erewrite Mem.support_drop. 2: eauto. simpl.
+  auto.
+  destruct (Mem.alloc m 0 (init_data_list_size (gvar_init v))) eqn:?.
+  destruct store_zeros eqn:?; try discriminate.
+  destruct store_init_data_list eqn:?; try discriminate.
+  erewrite Mem.support_drop. 2: eauto.
+  erewrite store_init_data_list_stack. 2: eauto.
+  erewrite store_zeros_stack. 2: eauto.
+  auto.
+Qed.
+
+Lemma alloc_globals_stack:
+  forall l ge m m',
+    alloc_globals ge m l = Some m' ->
+    Mem.stack (Mem.support m') = Mem.stack (Mem.support m).
+Proof.
+  induction l; simpl; intros; eauto. congruence.
+  destruct (alloc_global ge m a) eqn:?; try discriminate.
+  erewrite IHl. 2: eauto.
+  eapply alloc_global_stack; eauto.
+Qed.
+
+Lemma init_mem_stack:
+  forall (p: AST.program F V) m,
+    init_mem p = Some m ->
+    Mem.stack (Mem.support m) = (Mem.Node true nil nil None).
+Proof.
+  unfold init_mem.
+  intros.
+  erewrite alloc_globals_stack; eauto.
+  reflexivity.
+Qed.
+
 Lemma init_mem_genv_sup: forall p m,
   init_mem p = Some m ->
   genv_sup (globalenv p) = Mem.support m.
