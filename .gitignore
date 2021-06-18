@@ -15,6 +15,7 @@
 *.cmt
 # Emacs saves
 *~
+*#
 # Executables and configuration
 /ccomp
 /ccomp.byte

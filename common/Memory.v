@@ -554,6 +554,15 @@ Definition mem := mem'.
 
 Definition nextblock (m:mem) := fresh_block (support m).
 
+Lemma nextblock_stack : forall m, exists b path pos,
+      nextblock m = Stack b path pos.
+Proof.
+  intros. unfold nextblock. unfold fresh_block.
+  destruct (next_block_stree (stack (support m))).
+  destruct p. destruct p.
+  eauto.
+Qed.
+
 Lemma stack_eq_nextblock : forall m1 m2,
     stack(support m1) = stack(support m2) ->
     nextblock m1 = nextblock m2.

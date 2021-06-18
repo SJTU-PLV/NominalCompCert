@@ -152,6 +152,7 @@ Record t: Type := mkgenv {
   genv_symb: PTree.t block;             (**r mapping symbol -> block *)
   genv_defs: NMap.t (option (globdef F V));     (**r mapping block -> definition *)
   genv_sup: sup;                     (**r symbol support *)
+  genv_sup_range : forall b, sup_In b genv_sup -> exists id, b = Global id;
   genv_symb_eq : forall id b,PTree.get id genv_symb = Some b -> b = Global id;
   genv_symb_range: forall id b,PTree.get id genv_symb = Some b -> sup_In b genv_sup;
   genv_defs_range: forall b g, NMap.get _ b genv_defs = Some g -> sup_In b genv_sup;
@@ -234,7 +235,12 @@ Program Definition add_global (ge: t) (idg: ident * globdef F V) : t :=
     (PTree.set idg#1 (Global idg#1) ge.(genv_symb))
     (NMap.set _ (Global idg#1) (Some (idg#2)) ge.(genv_defs))
     (sup_incr_glob idg#1 (ge.(genv_sup)))
-    _ _ _ _.
+    _ _ _ _ _.
+Next Obligation.
+  apply Mem.sup_incr_glob_in in H.
+  destruct H.
+  eauto. eapply genv_sup_range; eauto.
+Qed.
 Next Obligation.
   destruct ge; simpl in *.
   rewrite PTree.gsspec in H. destruct (peq id i). inv H.
@@ -272,7 +278,10 @@ Proof.
 Qed.
 
 Program Definition empty_genv (pub: list ident): t :=
-  @mkgenv pub (PTree.empty _) (NMap.init _ None) sup_empty _ _ _ _.
+  @mkgenv pub (PTree.empty _) (NMap.init _ None) sup_empty _ _ _ _ _.
+Next Obligation.
+  apply Mem.empty_in in H. inv H.
+Qed.
 Next Obligation.
   rewrite PTree.gempty in H. discriminate.
 Qed.
