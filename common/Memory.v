@@ -888,11 +888,6 @@ Qed.
 Lemma support_return_frame : forall m m',
     return_frame m = Some m' ->
     sup_return_frame (support m) = Some (support m').
-Proof.
-  intros. unfold return_frame in H.
-  unfold sup_return_frame in *.
-  Set Printing All.
-  destruct (return_stree (stack(support m))).
 
 Proof. Admitted.
 
