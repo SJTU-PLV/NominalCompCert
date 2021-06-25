@@ -1329,3 +1329,20 @@ Lemma nlist_forall2_imply:
 Proof.
   induction 1; simpl; intros; constructor; auto.
 Qed.
+
+Ltac clean_destr :=
+  match goal with
+  | H: _ = left _ |- _ => clear H
+  | H: _ = right _ |- _ => clear H
+  end.
+
+Ltac destr :=
+  match goal with
+    |- context [match ?a with _ => _ end] => destruct a eqn:?; try intuition congruence
+  end; repeat clean_destr.
+
+Ltac destr_in H :=
+  match type of H with
+    context [match ?a with _ => _ end] => destruct a eqn:?; try intuition congruence
+  | _ => inv H
+  end; repeat clean_destr.
