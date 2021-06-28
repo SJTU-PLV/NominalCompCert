@@ -88,7 +88,7 @@ BACKEND=\
   Cminor.v Cminortyping.v Op.v CminorSel.v \
   Registers.v RTL.v \
   Unusedglob.v Unusedglobproof.v \
-  Machregs.v Locations.v Conventions1.v Conventions.v LTL.v \
+#  Machregs.v Locations.v Conventions1.v Conventions.v LTL.v \
   Allocation.v Allocproof.v \
   Tunneling.v Tunnelingproof.v \
   Linear.v Lineartyping.v \
@@ -101,12 +101,14 @@ BACKEND=\
 
 # C front-end modules (in cfrontend/)
 
-CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Ctyping.v Cstrategy.v Cexec.v \
+CFRONTEND=\
+  Csharpminor.v Cminorgen.v Cminorgenproof.v
+  #Ctypes.v Cop.v Csyntax.v Csem.v Ctyping.v Cstrategy.v Cexec.v \
   Initializers.v Initializersproof.v \
   SimplExpr.v SimplExprspec.v SimplExprproof.v \
   Clight.v ClightBigstep.v SimplLocals.v SimplLocalsproof.v \
-  Cshmgen.v Cshmgenproof.v \
-  Csharpminor.v Cminorgen.v Cminorgenproof.v
+  Cshmgen.v Cshmgenproof.v
+
 
 # Parser
 

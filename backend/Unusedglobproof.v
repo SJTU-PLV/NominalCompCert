@@ -562,118 +562,82 @@ Record meminj_preserves_globals (f: meminj) : Prop := {
     Genv.find_def ge b = Some gd /\ delta = 0 /\ b = b'
 }.
 
-Definition init_meminj : meminj :=
+Definition check_block (s:sup): block -> bool :=
   fun b =>
-    match Genv.invert_symbol ge b with
-    | Some id =>
-        match Genv.find_symbol tge id with
-        | Some b' => Some (b', 0)
-        | None => None
-        end
-    | None => None
-    end.
+    match b with
+    |Global id => match Genv.find_symbol tge id with
+                   |Some _ => true | None => false
+                 end
+    |Stack _ _ _ => if Mem.sup_dec b s then true else false
+                 end.
 
 Definition valid_meminj (s:sup) :=
+  fun b => if check_block s b then Some (b,0) else None.
+
+(*
+
+1) transformation : partial identity            | global identity + pass
+
+2) trans + program : find_symbol tge /global    | local env, offset
+
+3) running state : support  /stack              | support
+
+
+* external stack identity *
+*)
+
+(*Definition valid_meminj (s:sup) :=
   fun b => match b with
-         |Global _ => init_meminj b
+         |Global id  => match Genv.find_symbol tge id with
+                         |Some _ => Some (b,0)
+                         |None => None
+                       end
          |Stack _ _ _ => if Mem.sup_dec b s then Some (b,0) else None
          end.
-
-Lemma global_eq : forall id s, valid_meminj s (Global id) = init_meminj (Global id).
-Proof. intros. reflexivity. Qed.
-
-Remark init_meminj_eq:
-  forall id b b',
-  Genv.find_symbol ge id = Some b -> Genv.find_symbol tge id = Some b' ->
-  init_meminj b = Some(b', 0).
-Proof.
-  intros. unfold init_meminj. erewrite Genv.find_invert_symbol by eauto. rewrite H0. auto.
-Qed.
-
-Remark init_meminj_invert:
-  forall b b' delta,
-  init_meminj b = Some(b', delta) ->
-  delta = 0 /\ exists id, Genv.find_symbol ge id = Some b /\ Genv.find_symbol tge id = Some b'.
-Proof.
-  unfold init_meminj; intros.
-  destruct (Genv.invert_symbol ge b) as [id|] eqn:S; try discriminate.
-  destruct (Genv.find_symbol tge id) as [b''|] eqn:F; inv H.
-  split. auto. exists id. split. apply Genv.invert_find_symbol; auto. auto.
-Qed.
-
-
-Remark init_meminjP: meminjP_eq init_meminj.
-Proof.
-  intro. intros.
-  apply init_meminj_invert in H.
-  destruct H as (H1 & id & H2 & H3).
-  apply Genv.genv_symb_eq in H2.
-  apply Genv.genv_symb_eq in H3.
-  subst.  auto.
-Qed.
-
-Lemma init_meminj_preserves_globals:
-  meminj_preserves_globals init_meminj.
-Proof.
-  constructor; intros.
-- apply init_meminjP.
-- exploit init_meminj_invert; eauto. intros (A & id1 & B & C).
-  assert (id1 = id) by (eapply (Genv.genv_vars_inj ge); eauto). subst id1.
-  apply init_meminjP in H. inv H. auto.
-- exploit transform_find_symbol_1; eauto.
-  intros. split. auto.
-  eapply init_meminj_eq; eauto.
-- exploit transform_find_symbol_2; eauto. intros [H1 H2].
-  exploit init_meminj_eq; eauto.
-- exploit init_meminj_invert; eauto. intros (A & id & B & C).
-  assert (kept id) by (eapply transform_find_symbol_2; eauto).
-  assert (pm!id = Some gd).
-  { unfold pm; rewrite Genv.find_def_symbol. exists b; auto. }
-  assert ((prog_defmap tp)!id = Some gd).
-  { erewrite match_prog_def by eauto. rewrite IS.mem_1 by auto. auto. }
-  rewrite Genv.find_def_symbol in H3. destruct H3 as (b1 & P & Q).
-  fold tge in P.
-  exploit init_meminj_eq; eauto. intro.
-  apply init_meminjP in H3 as H4. inv H4.
-  rewrite P in C. inv C.
-  split; auto. split; auto. split; auto.
-  intros. eapply kept_closed; eauto.
-- exploit init_meminj_invert; eauto. intros (A & id & B & C).
-  apply init_meminjP in H as H'. inv H'.
-  assert ((prog_defmap tp)!id = Some gd).
-  { rewrite Genv.find_def_symbol. exists b'; auto. }
-  erewrite match_prog_def in H1 by eauto.
-  destruct (IS.mem id used); try discriminate.
-  rewrite Genv.find_def_symbol in H1. destruct H1 as (b1 & P & Q).
-  fold ge in P. replace b' with b1 by congruence. auto.
-Qed.
-
+*)
 Lemma valid_meminj_preserves_globals: forall s,
   meminj_preserves_globals (valid_meminj s).
 Proof.
   intros. constructor; intros.
   - intro. intros. destruct b. unfold valid_meminj in H.
-    destruct (Mem.sup_dec (Stack b p0 p1) s). inv H. eauto.
-    inv H. simpl in H. apply init_meminjP in H. auto.
+    destr_in H. unfold valid_meminj in H. simpl in H.
+    destr_in H.
   - apply Genv.genv_symb_eq in H0 as H1. inv H1.
-    simpl in H. eapply symbols_inject_1; eauto.
-    apply init_meminj_preserves_globals.
-  - apply Genv.genv_symb_eq in H0 as H1. inv H1.
-    simpl. eapply symbols_inject_2; eauto.
-    apply init_meminj_preserves_globals.
-  - apply Genv.genv_symb_eq in H as H1. inv H1.
-    simpl. eapply symbols_inject_3; eauto.
-    apply init_meminj_preserves_globals.
+    unfold valid_meminj in H. destr_in H. inv H.
+    simpl in Heqb. destr_in Heqb.
+    apply Genv.genv_symb_eq in Heqo. subst. eauto.
+  - unfold valid_meminj. apply Genv.genv_symb_eq in H0 as H1. inv H1.
+    exploit transform_find_symbol_1; eauto. intro.
+    simpl. rewrite H1. eauto.
+  - unfold valid_meminj. apply Genv.genv_symb_eq in H as H1. inv H1.
+    simpl. rewrite H. exploit transform_find_symbol_2; eauto.
+    intros [A B]. eauto.
   - apply Genv.genv_defs_range in H0 as H1.
     apply Genv.genv_sup_range in H1. destruct H1.
-    subst. simpl in H.
-    eapply defs_inject; eauto.
-    apply init_meminj_preserves_globals.
+    subst. unfold valid_meminj in H. simpl in H.
+    repeat destr_in H. destr_in Heqb.
+    apply Genv.genv_symb_eq in Heqo as H1. subst.
+    exploit transform_find_symbol_2; eauto. intros [A B].
+    assert (pm!x = Some gd).
+    { unfold pm; rewrite Genv.find_def_symbol. exists (Global x); auto. }
+    assert ((prog_defmap tp)!x = Some gd).
+    { erewrite match_prog_def by eauto. rewrite IS.mem_1 by auto. auto. }
+    rewrite Genv.find_def_symbol in H1. destruct H1 as (b1 & P & Q).
+    apply Genv.genv_symb_eq in P. inv P. eauto.
+    split; auto. split; auto. split; auto.
+    intros. eapply kept_closed; eauto.
   - apply Genv.genv_defs_range in H0 as H1.
     apply Genv.genv_sup_range in H1. destruct H1.
-    subst. simpl in H.
-    eapply defs_rev_inject; eauto.
-    apply init_meminj_preserves_globals.
+    subst. unfold valid_meminj in H. simpl in H.
+    destr_in H. destr_in Heqb. inv H.
+    apply Genv.genv_symb_eq in Heqo as H1. inv H1.
+    assert ((prog_defmap tp)!x = Some gd).
+    { rewrite Genv.find_def_symbol. exists (Global x); auto. }
+    erewrite match_prog_def in H by eauto.
+    destr_in H.
+    rewrite Genv.find_def_symbol in H. destruct H as (b1 & P & Q).
+    apply Genv.genv_symb_eq in P. inv P.
+    eauto.
 Qed.
 
 Lemma  globals_symbols_inject:
@@ -791,19 +755,22 @@ Lemma vinj_refl:
 Proof.
   intros.
   apply functional_extensionality.
-  intros. destruct x.
-  simpl. repeat destr.
-  apply H in s. congruence.
-  apply H in s. congruence.
-  reflexivity.
+  intros. destruct x; unfold valid_meminj; simpl.
+  destruct (Mem.sup_dec (Stack b p0 p1) s1);
+  destruct (Mem.sup_dec (Stack b p0 p1) s2).
+  auto. apply H in s. congruence.
+  apply H in s. congruence. auto.
+  destr.
 Qed.
 
 Lemma vinj_include_incr :forall s1 s2, Mem.sup_include s1 s2 -> inject_incr (valid_meminj s1) (valid_meminj s2).
 Proof.
-  intros.
-  intro. intros. destruct b. simpl in *.
-  destr_in H0. apply H in s. inv H0.
-  destr. auto.
+  intros. intro. intros. unfold valid_meminj in *.
+  destruct b; simpl in *.
+  destruct (Mem.sup_dec (Stack b p0 p1) s1);
+  destruct (Mem.sup_dec (Stack b p0 p1) s2).
+  auto. apply H in s. congruence. inv H0. inv H0.
+  destr.
 Qed.
 
 Lemma match_stacks_include :
@@ -853,32 +820,23 @@ Lemma valid_meminj_eq : forall b b' m delta,
     valid_meminj m b = Some (b',delta) ->
     (b = b' /\ delta = 0).
 Proof.
-  intros. destruct b.
-  unfold valid_meminj in H. destr_in H.
-  simpl in H. apply init_meminjP. auto.
+  unfold valid_meminj.
+  intros. destr_in H.
 Qed.
 
 Lemma external_call_inject:
   forall ef vargs m1 t vres m2 m1' vargs',
   external_call ef ge vargs m1 t vres m2 ->
   match_mem m1 m1' ->
-  stack_eq m1 m1' ->
   Val.inject_list (valid_meminj (Mem.support m1)) vargs vargs' ->
   exists vres', exists m2',
     external_call ef tge vargs' m1' t vres' m2'
     /\ Val.inject (valid_meminj (Mem.support m2)) vres vres'
     /\ match_mem m2 m2'
     /\ Mem.sup_include (Mem.support m1) (Mem.support m2).
-(*    /\ Mem.unchanged_on (loc_unmapped f) m1 m2
-    /\ Mem.unchanged_on (loc_out_of_reach f m1) m1' m2'
-    /\ inject_separated f (valid_meminj (Mem.support m2)) m1 m1'. *)
+
 Proof.
   Admitted.
-(*
-  intros. eapply external_call_mem_inject_gen; eauto.
-  apply globals_symbols_inject; auto.
-*)
-
 
 Lemma find_function_inject:
   forall j ros rs trs fd,
@@ -973,7 +931,7 @@ Lemma valid_stack_block : forall sp m,
     valid_meminj (Mem.support m) sp = Some (sp,0).
 Proof.
   intros.
-  destruct sp. simpl. inv H.
+  destruct sp. unfold valid_meminj. simpl. inv H.
   destruct (Mem.sup_dec (Stack b p0 p1) (Mem.support m)).
   eauto. unfold Mem.valid_block in H0. congruence. inv H.
   inv H1.
@@ -1035,7 +993,7 @@ Proof.
     eapply valid_meminj_preserves_globals; eauto.
     apply KEPT. red. exists pc, (Istore chunk addr args src pc'); auto.
     econstructor; eauto.
-    destruct sp0. simpl. inv SPINJ.
+    destruct sp0; unfold valid_meminj; simpl. inv SPINJ.
     destruct (Mem.sup_dec (Stack b p0 p1) (Mem.support m)).
     eauto. unfold Mem.valid_block in H2. congruence. inv SPINJ.
     inv H3. eauto.
@@ -1182,26 +1140,27 @@ Proof.
     }
     subst.
     destruct (eq_block x (Mem.nextblock (Mem.alloc_frame m))).
-    + subst. rewrite F.
+    + subst. rewrite F. unfold valid_meminj. simpl.
+      eapply Mem.valid_new_block in H. unfold Mem.valid_block in H.
       destruct (Mem.nextblock (Mem.alloc_frame m)).
-      simpl. destr. rewrite H1. reflexivity.
-      eapply Mem.valid_new_block in H.
-      apply n in H. inv H.
+      simpl. destruct (Mem.sup_dec (Stack b p0 p1) (Mem.support m')).
+      rewrite H1. reflexivity. congruence.
       generalize (Mem.nextblock_stack (Mem.alloc_frame tm)).
       intros (b0&path0&pos&H2). congruence.
     + apply G in n as n'. rewrite n'.
-      destruct x. simpl.
+      destruct x; unfold valid_meminj; simpl.
       apply Mem.support_alloc in H as H2. inv H2.
-      destr.
+      destruct (Mem.sup_dec (Stack b p0 p1)(Mem.support m));
+      destruct (Mem.sup_dec (Stack b p0 p1)(Mem.support m')); auto.
       * apply Mem.sup_incr_frame_in in s0.
-        destr. elim n0. rewrite H4. apply Mem.sup_incr_in.
+        rewrite H4 in n0. elim n0. apply Mem.sup_incr_in.
         right. auto.
-      * destr. rewrite H4 in s0.
+      * rewrite H4 in s0.
         apply Mem.sup_incr_in in s0.
         destruct s0. unfold Mem.nextblock in n.
         unfold Mem.alloc_frame in n. simpl in n. congruence.
         apply Mem.sup_incr_frame_in in H2. congruence.
-      * simpl. auto.
+      * destr.
   }
   subst j'.
   apply valid_meminj_eq in F as H1. destruct H1.
@@ -1225,7 +1184,7 @@ Proof.
   eapply val_inject_list_incr; eauto.
 
 - (* external function *)
-  exploit external_call_inject; eauto. apply MEMINJ.
+  exploit external_call_inject; eauto.
   intros (tres & tm' & A & B & C & D).
   econstructor; split.
   eapply exec_function_external; eauto.
@@ -1259,6 +1218,55 @@ Proof.
 Qed.
 *)
 
+Lemma valid_meminj_invert_strong:
+  forall s id,
+  valid_meminj s (Global id) = Some((Global id),0) ->
+  exists gd,
+     Genv.find_symbol ge id = Some (Global id)
+  /\ Genv.find_symbol tge id = Some (Global id)
+  /\ Genv.find_def ge (Global id) = Some gd
+  /\ Genv.find_def tge (Global id) = Some gd
+  /\ (forall i, ref_def gd i -> kept i).
+Proof.
+  intros. inversion H.
+  unfold valid_meminj in H. simpl in H. destr_in H. destr_in Heqb.
+  inv Heqb. inv H. exploit transform_find_symbol_2; eauto.
+  intros (A & B).
+  apply Genv.genv_symb_eq in B as B'. inv B'.
+  assert (exists gd, (prog_defmap p)!id = Some gd).
+  { apply prog_defmap_dom. eapply Genv.find_symbol_inversion; eauto. }
+  destruct H  as [gd DM]. rewrite Genv.find_def_symbol in DM.
+  destruct DM as (b'' & P & Q). fold ge in P.
+  apply Genv.genv_symb_eq in P as P'. inv P'.
+  fold ge in Q. exploit defs_inject. apply valid_meminj_preserves_globals.
+  eauto. eauto. intros (X & _ & Y & Z). subst.
+  exists gd; auto.
+Qed.
+
+Section INIT_MEM.
+
+Variables m tm: mem.
+Hypothesis IM: Genv.init_mem p = Some m.
+Hypothesis TIM: Genv.init_mem tp = Some tm.
+
+Definition init_meminj := valid_meminj sup_empty.
+
+Remark init_meminj_invert:
+  forall b b' delta,
+  init_meminj b = Some(b', delta) ->
+  delta = 0 /\ exists id, Genv.find_symbol ge id = Some b /\ Genv.find_symbol tge id = Some b'.
+Proof.
+  intros. unfold init_meminj in H. destruct b.
+  + unfold valid_meminj in H. simpl in H.
+    destruct (Mem.sup_dec (Stack b p0 p1) sup_empty).
+    apply Mem.empty_in in s. inv s. inv H.
+  + unfold valid_meminj in H. simpl in H.
+    destr_in H. destr_in Heqb. inv H.
+    apply Genv.genv_symb_eq in Heqo as H1. inv H1.
+    exploit transform_find_symbol_2; eauto.
+    intros (A & B). split. auto. exists i. eauto.
+Qed.
+
 Lemma init_meminj_invert_strong:
   forall b b' delta,
   init_meminj b = Some(b', delta) ->
@@ -1270,21 +1278,13 @@ Lemma init_meminj_invert_strong:
   /\ Genv.find_def tge b' = Some gd
   /\ (forall i, ref_def gd i -> kept i).
 Proof.
-  intros. exploit init_meminj_invert; eauto. intros (A & id & B & C).
-  assert (exists gd, (prog_defmap p)!id = Some gd).
-  { apply prog_defmap_dom. eapply Genv.find_symbol_inversion; eauto. }
-  destruct H0 as [gd DM]. rewrite Genv.find_def_symbol in DM.
-  destruct DM as (b'' & P & Q). fold ge in P. rewrite P in B; inv B.
-  fold ge in Q. exploit defs_inject. apply init_meminj_preserves_globals.
-  eauto. eauto. intros (X & _ & Y & Z). subst.
-  split. auto. exists id, gd; auto.
+  intros. unfold init_meminj in H. destruct b.
+  + unfold valid_meminj in H. simpl in H.
+    destruct (Mem.sup_dec (Stack b p0 p1) sup_empty).
+    apply Mem.empty_in in s. inv s. inv H.
+  + apply valid_meminj_eq in H as H1. inv H1.
+    exploit valid_meminj_invert_strong; eauto.
 Qed.
-
-Section INIT_MEM.
-
-Variables m tm: mem.
-Hypothesis IM: Genv.init_mem p = Some m.
-Hypothesis TIM: Genv.init_mem tp = Some tm.
 
 Lemma bytes_of_init_inject:
   forall il,
@@ -1298,11 +1298,13 @@ Proof.
   induction (Z.to_nat z); simpl; constructor. constructor. auto.
   destruct (Genv.find_symbol ge i) as [b|] eqn:FS.
   assert (kept i). { apply H. red. exists i0; auto with coqlib. }
-  exploit symbols_inject_2. apply init_meminj_preserves_globals. eauto. eauto.
+  exploit symbols_inject_2. instantiate (1:= init_meminj).
+  apply valid_meminj_preserves_globals. eauto. eauto.
   intros (A & B). rewrite A. apply inj_value_inject.
   econstructor; eauto. symmetry; apply Ptrofs.add_zero.
   destruct (Genv.find_symbol tge i) as [b'|] eqn:FS'.
-  exploit symbols_inject_3. apply init_meminj_preserves_globals. eauto.
+  exploit symbols_inject_3. instantiate (1:= init_meminj).
+  apply valid_meminj_preserves_globals. eauto.
   intros (A & B). congruence.
   apply repeat_Undef_inject_self.
 + apply IHil. intros id [ofs IN]. apply H. exists ofs; auto with coqlib.
@@ -1325,7 +1327,8 @@ Lemma init_mem_inj_1:
   Mem.mem_inj init_meminj m tm.
 Proof.
   intros; constructor; intros.
-- exploit init_meminj_invert_strong; eauto. intros (A & id & gd & B & C & D & E & F).
+- exploit init_meminj_invert_strong; eauto.
+  intros (A & id & gd & B & C & D & E & F).
   exploit (Genv.init_mem_characterization_gen p); eauto.
   exploit (Genv.init_mem_characterization_gen tp); eauto.
   destruct gd as [f|v].
@@ -1336,9 +1339,9 @@ Proof.
   apply Q1 in H0. destruct H0. subst.
   apply Mem.perm_cur. eapply Mem.perm_implies; eauto.
   apply P2. lia.
-- exploit init_meminj_invert; eauto. intros (A & id & B & C).
-  subst delta. apply Z.divide_0_r.
-- exploit init_meminj_invert_strong; eauto. intros (A & id & gd & B & C & D & E & F).
+- apply valid_meminj_eq in H. inv H. apply Z.divide_0_r.
+- exploit init_meminj_invert_strong; eauto.
+  intros (A & id & gd & B & C & D & E & F).
   exploit (Genv.init_mem_characterization_gen p); eauto.
   exploit (Genv.init_mem_characterization_gen tp); eauto.
   destruct gd as [f|v].
@@ -1363,8 +1366,12 @@ Lemma init_mem_inj_2:
 Proof.
   constructor; intros.
 - apply init_mem_inj_1.
-- destruct (init_meminj b) as [[b' delta]|] eqn:INJ; auto.
-  elim H. exploit init_meminj_invert; eauto. intros (A & id & B & C).
+- destruct b; unfold init_meminj; unfold valid_meminj;
+  simpl.  destr.  destr_in Heqb0. apply Mem.empty_in in s.
+  inv s. destr. destr_in Heqb.
+  exploit transform_find_symbol_2; eauto. intros (A & B).
+  elim H.
+  apply Genv.genv_symb_eq in B as B'. inv B'.
   eapply Genv.find_symbol_not_fresh; eauto.
 - exploit init_meminj_invert; eauto. intros (A & id & B & C).
   eapply Genv.find_symbol_not_fresh; eauto.
@@ -1387,21 +1394,22 @@ Proof.
   apply P1. lia.
 Qed.
 
+
 Lemma valid_meminj_init : init_meminj = valid_meminj (Mem.support m).
 Proof.
   apply functional_extensionality.
   intro. destruct x.
-  simpl. destr.
+  * unfold init_meminj.
   apply Genv.init_mem_stack in IM.
-  simpl in s. rewrite IM in s.
-  simpl in s. destruct p0; simpl in s. inv s. inv H0.
-  destruct n; simpl in s; inv s.
-  unfold init_meminj.
-  destr.
-  apply Genv.invert_find_symbol in Heqo.
-  apply Genv.genv_symb_eq in Heqo.
-  inv Heqo.
-  simpl. auto.
+  unfold valid_meminj.
+  assert (~sup_In (Stack b p0 p1) sup_empty) by (apply Mem.empty_in).
+  assert (~sup_In (Stack b p0 p1) (Mem.support m)).
+  simpl. rewrite IM. destruct p0. simpl. intros [H0 H1]. auto.
+  simpl. destruct n; auto.
+  simpl. repeat destr.
+  repeat destr_in Heqb0.
+  repeat destr_in Heqb1.
+  * reflexivity.
 Qed.
 
 End INIT_MEM.
@@ -1440,7 +1448,7 @@ Lemma transf_initial_states:
   forall S1, initial_state p S1 -> exists S2, initial_state tp S2 /\ match_states S1 S2.
 Proof.
   intros. inv H. exploit init_mem_inject; eauto. intros (tm & A & B).
-  generalize init_meminj_preserves_globals. intro.
+  generalize (valid_meminj_preserves_globals sup_empty). fold init_meminj. intro.
   exploit symbols_inject_2. eauto. eapply kept_main. eexact H1.
   intros (P & Q).
   rewrite Genv.find_funct_ptr_iff in H2.
@@ -1472,7 +1480,10 @@ Lemma transf_program_correct_1:
 Proof.
   intros.
   eapply forward_simulation_step.
-  exploit globals_symbols_inject. apply init_meminj_preserves_globals. intros [A B]. exact A.
+  exploit globals_symbols_inject.
+  apply (valid_meminj_preserves_globals sup_empty).
+  fold init_meminj.
+  intros [A B]. exact A.
   eexact transf_initial_states.
   eexact transf_final_states.
   eexact step_simulation.

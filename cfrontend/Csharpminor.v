@@ -274,7 +274,7 @@ Inductive alloc_variables: env -> mem ->
       alloc_variables e m nil e m
   | alloc_variables_cons:
       forall e m id sz vars m1 b1 m2 e2,
-      Mem.alloc true m 0 sz = (m1, b1) ->
+      Mem.alloc m 0 sz = (m1, b1) ->
       alloc_variables (PTree.set id (b1, sz) e) m1 vars e2 m2 ->
       alloc_variables e m ((id, sz) :: vars) e2 m2.
 
@@ -364,11 +364,12 @@ Inductive step: state -> trace -> state -> Prop :=
   | step_skip_block: forall f k e le m,
       step (State f Sskip (Kblock k) e le m)
         E0 (State f Sskip k e le m)
-  | step_skip_call: forall f k e le m m',
+  | step_skip_call: forall f k e le m m' m'',
       is_call_cont k ->
       Mem.free_list m (blocks_of_env e) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       step (State f Sskip k e le m)
-        E0 (Returnstate Vundef k m')
+        E0 (Returnstate Vundef k m'')
 
   | step_set: forall f id a k e le m v,
       eval_expr e le m a v ->
@@ -430,13 +431,15 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sswitch islong a cases) k e le m)
         E0 (State f (seq_of_lbl_stmt (select_switch n cases)) k e le m)
 
-  | step_return_0: forall f k e le m m',
+  | step_return_0: forall f k e le m m' m'',
       Mem.free_list m (blocks_of_env e) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       step (State f (Sreturn None) k e le m)
-        E0 (Returnstate Vundef (call_cont k) m')
-  | step_return_1: forall f a k e le m v m',
+        E0 (Returnstate Vundef (call_cont k) m'')
+  | step_return_1: forall f a k e le m v m' m'',
       eval_expr e le m a v ->
       Mem.free_list m (blocks_of_env e) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       step (State f (Sreturn (Some a)) k e le m)
         E0 (Returnstate v (call_cont k) m')
   | step_label: forall f lbl s k e le m,
@@ -452,7 +455,7 @@ Inductive step: state -> trace -> state -> Prop :=
       list_norepet (map fst f.(fn_vars)) ->
       list_norepet f.(fn_params) ->
       list_disjoint f.(fn_params) f.(fn_temps) ->
-      alloc_variables empty_env m (fn_vars f) e m1 ->
+      alloc_variables empty_env (Mem.alloc_frame m) (fn_vars f) e m1 ->
       bind_parameters f.(fn_params) vargs (create_undef_temps f.(fn_temps)) = Some le ->
       step (Callstate (Internal f) vargs k m)
         E0 (State f f.(fn_body) k e le m1)
