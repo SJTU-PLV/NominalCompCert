@@ -31,6 +31,8 @@ End BLOCK.
 
 Definition path := list nat.
 
+Definition fid := option ident. (*None means external function*)
+
 Lemma nat_eq: forall n1 n2 :nat, {n1=n2} + {n1<>n2}.
 Proof.
   intros.
@@ -48,6 +50,18 @@ Proof.
 Qed.
 
 Definition eq_path := list_eq_dec nat_eq.
+
+Definition fid_eq : forall fi1 fi2 : fid, {fi1=fi2} + {fi1<>fi2}.
+Proof.
+  intros.
+  destruct fi1; destruct fi2.
+  + destruct (peq i i0). left. congruence. right. congruence.
+  + right. congruence.
+  + right. congruence.
+  + left. congruence.
+Qed.
+
+
 (*
 Definition Subpass (p1 p2:pass): Prop :=
   exists p0, p2 = p0++p1.
@@ -68,8 +82,11 @@ Proof.
   rewrite H. auto.
 Qed.
 *)
+
+
+
 Inductive block' :=
-  |Stack  : bool -> path -> positive -> block'
+  |Stack  : fid -> path -> positive -> block'
   |Global : ident -> block'.
 
 Module Block <: BLOCK.
@@ -81,7 +98,7 @@ Proof.
   intros. destruct x; destruct y; try(right; congruence).
   - (destruct (eq_path p p1)); try (right; congruence).
     destruct (peq p0 p2); try (right; congruence).
-    destruct (beq b b0). left. congruence. right. congruence.
+    destruct (fid_eq f f0). left. congruence. right. congruence.
   - destruct (peq i i0). left. congruence. right. congruence.
 Qed.
 
@@ -2305,9 +2322,9 @@ Definition P2 : meminj -> Prop :=
 Definition P3 : meminj -> Prop :=
   fun f => forall b,
       match b with
-      |Stack true path pos => forall b' delta, f b = Some (b',delta ) ->
+      |Stack (Some id) path pos => forall b' delta, f b = Some (b',delta ) ->
                                     b' = b /\ delta = 0
-      |Stack false path pos => f b = Some (b,0)
+      |Stack None path pos => f b = Some (b,0)
       |Global id => f b = Some (b,0)
               end.
 
@@ -2315,9 +2332,9 @@ Definition P3 : meminj -> Prop :=
 Definition P4 : meminj -> Prop :=
   fun f => forall b,
       match b with
-      |Stack true path pos => forall b' delta, f b = Some (b',delta) ->
-                                    b' = Stack true path 1
-      |Stack false path pos => f b = Some (b,0)
+      |Stack (Some id) path pos => forall b' delta, f b = Some (b',delta) ->
+                                    b' = Stack (Some id) path 1
+      |Stack None path pos => f b = Some (b,0)
       |Global id => f b = Some (b,0)
       end.
 
