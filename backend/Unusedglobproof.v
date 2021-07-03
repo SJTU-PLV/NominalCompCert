@@ -1139,47 +1139,51 @@ Proof.
   eapply Mem.return_frame_parallel_stackeq; eauto.
   rewrite <- H5. auto.
 - (* internal function *)
-  exploit Mem.alloc_frame_parallel_inject. apply MEMINJ. intro.
+  destruct (Mem.alloc_frame tm id) eqn:ALLOC_FRAME.
+  exploit Mem.alloc_frame_parallel_inject. apply MEMINJ. eauto. eauto. intro.
   exploit Mem.alloc_parallel_inject; eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros (j' & tm' & tstk & C & D & E & F & G).
-  assert (STK: stk = Mem.nextblock (Mem.alloc_frame m id)) by (eapply Mem.alloc_result; eauto).
-  assert (TSTK: tstk = Mem.nextblock (Mem.alloc_frame tm id)) by (eapply Mem.alloc_result; eauto).
-  assert (MEMINJP' : j' = valid_meminj (Mem.support m')).
+  assert (STK: stk = Mem.nextblock m') by (eapply Mem.alloc_result; eauto).
+  assert (TSTK: tstk = Mem.nextblock m0) by (eapply Mem.alloc_result; eauto).
+  assert (MEMINJP' : j' = valid_meminj (Mem.support m'')).
   {
     apply functional_extensionality.
     intros.
     assert (stk=tstk).
     {
       inv MEMINJ.
-      apply Mem.alloc_frame_parallel_stackeq with (id:=id) in H1.
-      apply Mem.stack_eq_nextblock in H1. auto.
+      eapply Mem.alloc_frame_parallel_stackeq with (id:=id) in H2; eauto.
+      inv H2.
+      apply Mem.stack_eq_nextblock in H5. auto.
     }
     subst.
-    destruct (eq_block x (Mem.nextblock (Mem.alloc_frame m id))).
+    destruct (eq_block x (Mem.nextblock m')).
     + subst. rewrite F. unfold valid_meminj. simpl.
-      eapply Mem.valid_new_block in H. unfold Mem.valid_block in H.
-      destruct (Mem.nextblock (Mem.alloc_frame m id)).
-      simpl. destruct (Mem.sup_dec (Stack f0 p0 p1) (Mem.support m')).
-      rewrite H1. reflexivity. congruence.
-      generalize (Mem.nextblock_stack (Mem.alloc_frame tm id)).
-      intros (b0&path0&pos&H2). congruence.
+      eapply Mem.valid_new_block in H0. unfold Mem.valid_block in H0.
+      destruct (Mem.nextblock m').
+      simpl. destruct (Mem.sup_dec (Stack f0 p1 p2) (Mem.support m'')).
+      rewrite H2. reflexivity. congruence.
+      generalize (Mem.nextblock_stack m0).
+      intros (b0&path0&pos&H3). congruence.
     + apply G in n as n'. rewrite n'.
       destruct x; unfold valid_meminj; simpl.
-      apply Mem.support_alloc in H as H2. inv H2.
-      destruct (Mem.sup_dec (Stack f0 p0 p1)(Mem.support m));
-      destruct (Mem.sup_dec (Stack f0 p0 p1)(Mem.support m')); auto.
-      * eapply Mem.sup_incr_frame_in in s0.
-        rewrite H4 in n0. elim n0. eapply Mem.sup_incr_in.
-        right. eauto.
-      * rewrite H4 in s0.
+      apply Mem.support_alloc in H0 as H3. inv H3.
+      destruct (Mem.sup_dec (Stack f0 p1 p2)(Mem.support m));
+      destruct (Mem.sup_dec (Stack f0 p1 p2)(Mem.support m'')); auto.
+      * apply Mem.sup_incr_frame_in with (id := id) in s0.
+        rewrite H5 in n0. elim n0. eapply Mem.sup_incr_in.
+        right. rewrite (Mem.alloc_frame_support _ _ _ _ H).
+        eauto.
+      * rewrite H5 in s0.
         apply Mem.sup_incr_in in s0.
         destruct s0. unfold Mem.nextblock in n.
         unfold Mem.alloc_frame in n. simpl in n. congruence.
-        apply Mem.sup_incr_frame_in in H2. congruence.
+        rewrite (Mem.alloc_frame_support _ _ _ _ H) in H3.
+        apply Mem.sup_incr_frame_in in H3. congruence.
       * destr.
   }
   subst j'.
-  apply valid_meminj_eq in F as H1. destruct H1.
+  apply valid_meminj_eq in F as H2. destruct H2.
   subst.
   econstructor; split.
   eapply exec_function_internal; eauto.
@@ -1187,15 +1191,16 @@ Proof.
   eapply match_stacks_include; eauto.
   intro. intro. eapply Mem.valid_block_alloc; eauto.
   unfold Mem.alloc_frame. unfold Mem.valid_block. simpl.
-  eapply Mem.sup_incr_frame_in in H1; eauto.
-  auto. split.
+  apply Mem.sup_incr_frame_in with (id := id) in H2; eauto.
+  rewrite (Mem.alloc_frame_support _ _ _ _ H).
+  auto. auto. split.
   eapply Mem.alloc_parallel_stackeq; eauto.
-  eapply Mem.alloc_frame_parallel_stackeq; eauto.
-  apply MEMINJ. auto.
+  eapply Mem.alloc_frame_parallel_stackeq.
+  apply MEMINJ. eauto. eauto. eauto.
   split. eapply Mem.valid_new_block; eauto.
-  generalize (Mem.nextblock_stack (Mem.alloc_frame m id)). intros.
-  destruct H1 as (bb&path&pos&H1).
-  rewrite H1. auto.
+  generalize (Mem.nextblock_stack m'). intros.
+  destruct H2 as (bb&path1&pos&H2).
+  rewrite H2. auto.
   apply init_regs_inject; auto.
   eapply val_inject_list_incr; eauto.
 

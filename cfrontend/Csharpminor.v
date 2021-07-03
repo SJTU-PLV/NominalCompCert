@@ -453,14 +453,15 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sgoto lbl) k e le m)
         E0 (State f s' k' e le m)
 
-  | step_internal_function: forall f vargs k m m1 e le id,
+  | step_internal_function: forall f vargs k m m1 m2 e le id path,
       list_norepet (map fst f.(fn_vars)) ->
       list_norepet f.(fn_params) ->
       list_disjoint f.(fn_params) f.(fn_temps) ->
-      alloc_variables empty_env (Mem.alloc_frame m id) (fn_vars f) e m1 ->
+      Mem.alloc_frame m id = (m1,path) ->
+      alloc_variables empty_env m1 (fn_vars f) e m2 ->
       bind_parameters f.(fn_params) vargs (create_undef_temps f.(fn_temps)) = Some le ->
       step (Callstate (Internal f) vargs k m id)
-        E0 (State f f.(fn_body) k e le m1)
+        E0 (State f f.(fn_body) k e le m2)
 
   | step_external_function: forall ef vargs k m t vres m' id,
       external_call ef ge vargs m t vres m' ->

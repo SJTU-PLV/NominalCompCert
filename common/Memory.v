@@ -362,9 +362,12 @@ Proof.
     auto. intros [H|H]. inv H. auto.
 Qed.
 
-Definition sup_incr_frame (s:sup)(id:ident): sup :=
+Definition sup_incr_frame (s:sup)(id:ident):sup :=
   let (t',p) := next_stree (stack s) id in
   mksup t' (global s).
+
+Definition next_path (s:sup)(id:ident) : path :=
+  let (t,p) := next_stree (stack s) id in p.
 
 Lemma next_stree_in : forall p p' t t' pos b id,
     next_stree t id = (t',p') ->
@@ -392,7 +395,8 @@ Proof.
       destruct (nth_error l0 a); reflexivity.
 Qed.
 
-Theorem sup_incr_frame_in : forall s b id, sup_In b s <-> sup_In b (sup_incr_frame s id).
+Theorem sup_incr_frame_in : forall s b id,
+    sup_In b s <-> sup_In b (sup_incr_frame s id).
 Proof.
   intros. unfold sup_In. destruct b.
   - unfold sup_incr_frame.
@@ -555,8 +559,8 @@ Definition mem := mem'.
 
 Definition nextblock (m:mem) := fresh_block (support m).
 
-Lemma nextblock_stack : forall m, exists b path pos,
-      nextblock m = Stack b path pos.
+Lemma nextblock_stack : forall m, exists f path pos,
+      nextblock m = Stack f path pos.
 Proof.
   intros. unfold nextblock. unfold fresh_block.
   destruct (next_block_stree (stack (support m))).
@@ -862,19 +866,30 @@ Lemma mem_incr_2: forall m b, sup_In b (m.(support)) -> sup_In b (sup_incr (m.(s
 Proof.
   intros. unfold sup_incr. apply sup_incr_in2. auto.
 Qed.
-Program Definition alloc_frame (m:mem)(id:ident):=
-  mkmem (m.(mem_contents)) (m.(mem_access)) (sup_incr_frame (m.(support)) id)
-                                                            _ _ _.
+Program Definition alloc_frame (m:mem)(id:ident) :=
+  ((mkmem (m.(mem_contents)) (m.(mem_access)) (sup_incr_frame (m.(support)) id) _ _ _), next_path (m.(support)) id).
 Next Obligation.
   apply access_max.
 Qed.
 Next Obligation.
   apply nextblock_noaccess.
-  intro. apply H. apply sup_incr_frame_in. auto.
+  intro. apply H.
+  eapply sup_incr_frame_in in H0. eauto.
 Qed.
 Next Obligation.
   apply contents_default.
 Qed.
+
+Lemma alloc_frame_support : forall m1 m2 id p,
+    alloc_frame m1 id = (m2,p) ->
+    support m2 = sup_incr_frame (support m1) id.
+Proof.
+  intros. inv H. reflexivity. Qed.
+Lemma alloc_frame_path : forall m1 m2 id p,
+    alloc_frame m1 id = (m2,p) ->
+    p = next_path (support m1) id.
+Proof.
+  intros. inv H. reflexivity. Qed.
 
 Program Definition return_frame (m:mem) : option mem :=
   match (sup_return_frame (support m)) with
@@ -898,7 +913,6 @@ Qed.
 Lemma support_return_frame : forall m m',
     return_frame m = Some m' ->
     sup_return_frame (support m) = Some (support m').
-
 Proof. Admitted.
 
 Lemma return_frame_nonempty : forall m m',
@@ -3580,9 +3594,12 @@ Theorem alloc_parallel_stackfeq :
 Proof. Admitted.
 
 Theorem alloc_frame_parallel_stackfeq :
-  forall m1 m2 id,
+  forall m1 m2 m1' m2' id p1 p2,
     stack_feq m1 m2 ->
-    stack_feq (alloc_frame m1 id) = stack_feq (alloc_frame m2 id).
+    alloc_frame m1 id = (m1',p1) ->
+    alloc_frame m2 id = (m2',p2) ->
+    p1 = p2 /\
+    stack_feq m1' = stack_feq m2'.
 Proof. Admitted.
 
 Theorem return_frame_parallel_stackfeq :
@@ -4775,12 +4792,20 @@ Proof.
 Qed.
 
 Theorem alloc_frame_parallel_stackeq :
-  forall m1 m2 id,
+  forall m1 m2 id m1' m2' p1 p2,
     stack (support m1) = stack (support m2) ->
-    stack (support (alloc_frame m1 id)) = stack (support (alloc_frame m2 id)).
+    alloc_frame m1 id = (m1',p1) ->
+    alloc_frame m2 id = (m2',p2) ->
+    p1 = p2 /\
+    stack (support m1') = stack (support m2').
 Proof.
-  intros.
-  unfold alloc_frame. simpl. unfold sup_incr_frame.
+  intros. split.
+  rewrite (alloc_frame_path _ _ _ _ H0).
+  rewrite (alloc_frame_path _ _ _ _ H1).
+  unfold next_path. rewrite H. reflexivity.
+  rewrite (alloc_frame_support _ _ _ _ H0).
+  rewrite (alloc_frame_support _ _ _ _ H1).
+  unfold sup_incr_frame.
   rewrite H. destruct (next_stree (stack (support m2))).
   reflexivity.
 Qed.
@@ -4813,9 +4838,11 @@ Proof.
   Admitted.
 
 Theorem alloc_frame_parallel_inject :
-  forall f m1 m2 id,
+  forall f m1 m2 id m1' m2' p1 p2,
     inject f m1 m2 ->
-    inject f (alloc_frame m1 id) (alloc_frame m2 id).
+    alloc_frame m1 id = (m1',p1) ->
+    alloc_frame m2 id = (m2',p2) ->
+    inject f m1' m2'.
 Proof.
   Admitted.
 
