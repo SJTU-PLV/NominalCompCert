@@ -417,8 +417,8 @@ Qed.
 
 End STREE.
 
-Declare Module Sup: SUP.
-(*
+(* Declare Module Sup: SUP. *)
+
 Module Sup <: SUP.
 
 Record sup' : Type := mksup {
@@ -428,7 +428,13 @@ Record sup' : Type := mksup {
 
 Definition sup := sup'.
 
-Program Definition sup_empty : sup := mksup empty_stree nil.
+Definition sup_empty : sup := mksup empty_stree nil.
+
+Definition sup_cpath (s:sup) := cpath (stack s).
+
+Definition sup_npath (s:sup) := npath (stack s).
+
+Definition sup_depth (s:sup) := depth (stack s).
 
 Definition sup_In(b:block)(s:sup) : Prop :=
   match b with
@@ -507,8 +513,105 @@ Proof.
   intros. apply sup_incr_in2.
 Qed.
 
+(* sup_incr_frame *)
+Definition sup_incr_frame (s:sup)(id:ident):sup :=
+  let (t',p) := next_stree (stack s) id in
+  mksup t' (global s).
+
+Theorem sup_incr_frame_in : forall s b id,
+    sup_In b s <-> sup_In b (sup_incr_frame s id).
+Proof.
+  intros. unfold sup_In. destruct b.
+  - unfold sup_incr_frame.
+    destruct (next_stree (stack s)) eqn:?.
+    simpl.
+    eapply next_stree_in. eauto.
+  - unfold sup_incr_frame.
+    destruct (next_stree (stack s)).
+    reflexivity.
+Qed.
+
+(* sup_return_frame *)
+Definition sup_return_frame (s:sup) : option sup :=
+  match return_stree (stack s) with
+    |Some (t',p) => Some (mksup t' (global s))
+    |None => None
+  end.
+
+Definition is_active (s:stree) : Prop :=
+  match s with
+    |Node _ _ _ (Some _) => True
+    |_ => False
+  end.
+
+Definition sup_return_frame' (s:sup) : sup :=
+  match sup_return_frame s with
+    |Some s' => s'
+    |None => sup_empty
+  end.
+
+Lemma sup_return_refl : forall s s', is_active (stack s) ->
+    sup_return_frame s = Some s' <-> sup_return_frame' s = s'.
+Proof.
+  intros.
+  unfold sup_return_frame'. destruct (sup_return_frame s) eqn:?.
+  split;  congruence.
+  unfold sup_return_frame in Heqo.
+  destruct (return_stree (stack s)) eqn:?. destruct p.
+  inv Heqo.
+  unfold is_active in H. destruct (stack s).
+  destruct o.
+  inv Heqo0. destr_in H1. destruct p. inv H1.
+  destruct H.
+Qed.
+
+Lemma sup_return_refl' : forall s , is_active (stack s) ->
+    sup_return_frame s = Some (sup_return_frame' s).
+Proof.
+  intros. apply sup_return_refl; auto.
+Qed.
+
+Theorem sup_return_frame_in : forall s s',
+    sup_return_frame s = Some (s') ->
+    (forall b, sup_In b s <-> sup_In b s').
+Proof.
+  intros.
+  destruct b; unfold sup_return_frame in H;
+  destruct (return_stree (stack s)) eqn:?.
+  - destruct p1. inv H.
+    simpl.
+    eapply return_stree_in; eauto.
+  - inv H.
+  - destruct p. inv H. reflexivity.
+  - inv H.
+Qed.
+
+(* sup_incr_glob *)
+Definition sup_incr_glob (i:ident) (s:sup) : sup :=
+ mksup (stack s) (i::(global s)).
+
+Theorem sup_incr_glob_in :  forall i s b,
+    sup_In b (sup_incr_glob i s) <-> b = (Global i) \/ sup_In b s.
+Proof.
+  split.
+  - unfold sup_incr_glob.
+    destruct b; simpl. auto. intros [H|H]. rewrite H. auto. auto.
+  - intros [H|H]; unfold sup_incr_glob.
+    rewrite H. simpl. auto.
+    destruct b. simpl. auto. simpl. auto.
+Qed.
+
+Theorem sup_incr_glob_in1 : forall i s, sup_In (Global i) (sup_incr_glob i s).
+Proof. intros. apply sup_incr_glob_in. left. auto. Qed.
+Theorem sup_incr_glob_in2 : forall i s, sup_include s (sup_incr_glob i s).
+Proof. intros. intro. intro. apply sup_incr_glob_in. right. auto. Qed.
+
+(* sup_incr_stack *)
+
+Definition sup_incr_block := sup_incr.
+
 End Sup.
-*)
+
 Module Mem <: MEM.
 Include Sup.
 Local Notation "a # b" := (NMap.get _ b a) (at level 1).
@@ -830,6 +933,100 @@ Proof.
 Qed.
 
 Program Definition alloc (m: mem) (lo hi: Z) :=
+  (mkmem (NMap.set _ (nextblock m)
+                   (ZMap.init Undef)
+                   m.(mem_contents))
+         (NMap.set _ (nextblock m)
+                   (fun ofs k => if zle lo ofs && zlt ofs hi then Some Freeable else None)
+                   m.(mem_access))
+         (sup_incr (m.(support)))
+         _ _ _,
+   (nextblock m)).
+Next Obligation.
+  repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)).
+  subst b. destruct (zle lo ofs && zlt ofs hi); red; auto with mem.
+  apply access_max.
+Qed.
+Next Obligation.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)).
+  subst b. elim H. apply mem_incr_1.
+  apply nextblock_noaccess. red; intros; elim H.
+  apply mem_incr_2. auto.
+Qed.
+Next Obligation.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)). auto. apply contents_default.
+Qed.
+
+Lemma mem_incr_glob1: forall i m, sup_In (Global i) (sup_incr_glob i (m.(support))).
+Proof.
+  intros. simpl. auto.
+Qed.
+
+Lemma mem_incr_glob2: forall i m b, sup_In b (m.(support)) -> sup_In b (sup_incr_glob i (m.(support))).
+Proof.
+  intros. unfold sup_incr_glob. destruct b. auto. simpl in *. auto.
+Qed.
+
+Program Definition alloc_glob(i:ident) (m:mem) (lo hi:Z) :=
+  ((mkmem (NMap.set _ (Global i)
+                  (ZMap.init Undef)
+                  m.(mem_contents))
+        (NMap.set _ (Global i)
+                  (fun ofs k => if zle lo ofs && zlt ofs hi then Some Freeable else None)
+                  m.(mem_access))
+        (sup_incr_glob i (m.(support)))
+        _ _ _), (Global i)).
+Next Obligation.
+  repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b (Global i)).
+  subst b. destruct (zle lo ofs && zlt ofs hi); red; auto with mem.
+  apply access_max.
+Qed.
+Next Obligation.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b (Global i)).
+  subst b. elim H. simpl. auto.
+  apply nextblock_noaccess. red; intros; elim H.
+  apply mem_incr_glob2. auto.
+Qed.
+Next Obligation.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b (Global i)). auto. apply contents_default.
+Qed.
+
+Program Definition alloc_frame (m:mem)(id:ident) :=
+  ((mkmem (m.(mem_contents)) (m.(mem_access)) (sup_incr_frame (m.(support)) id) _ _ _), sup_npath (m.(support)) id).
+Next Obligation.
+  apply access_max.
+Qed.
+Next Obligation.
+  apply nextblock_noaccess.
+  intro. apply H.
+  eapply sup_incr_frame_in in H0. eauto.
+Qed.
+Next Obligation.
+  apply contents_default.
+Qed.
+
+Lemma is_active_dec : forall s, {is_active s} + {~ is_active s}.
+Proof. intros. destruct s. destruct o; simpl; auto. Qed.
+
+Program Definition return_frame (m:mem) : option mem :=
+  if is_active_dec (stack(support m)) then
+     Some (mkmem (m.(mem_contents))
+                 (m.(mem_access))
+                 (sup_return_frame' (support m))
+                 (m.(access_max))
+                 _
+                 (m.(contents_default))
+         )
+     else None.
+Next Obligation.
+  apply nextblock_noaccess.
+  eapply sup_return_refl' in H.
+  intro. apply H0.
+  eapply sup_return_frame_in in H.
+  apply H. auto.
+Qed.
+
+Program Definition alloc_block (m: mem) (lo hi: Z) :=
   (mkmem (NMap.set _ (nextblock m)
                    (ZMap.init Undef)
                    m.(mem_contents))
