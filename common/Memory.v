@@ -99,7 +99,6 @@ Proof.
 Qed.
 End NMap.
 
-(* Declare Module Sup: SUP. *)
 Section STREE.
 
 Fixpoint fresh_pos (l: list positive) : positive :=
@@ -418,6 +417,8 @@ Qed.
 
 End STREE.
 
+Declare Module Sup: SUP.
+(*
 Module Sup <: SUP.
 
 Record sup' : Type := mksup {
@@ -449,36 +450,47 @@ Proof.
   apply In_dec. apply peq.
 Qed.
 
-Definition fresh_block (s:sup) :=
-  Global (fresh_pos (global s)).
+Definition fresh_block (s:sup): block :=
+  match next_block_stree (stack s) with
+    |(f,pos,path,_) =>  Stack f path pos
+  end.
 
 Theorem freshness : forall s, ~sup_In (fresh_block s) s.
 Proof.
   intros. unfold fresh_block.
-  intro. simpl in H.
-  eapply fresh_notin; eauto.
+  destruct (next_block_stree (stack s)) eqn:?.
+  destruct p. destruct p.
+  eapply stree_freshness; eauto.
 Qed.
 
-Definition sup_add (b:block)(s:sup) :=
-  match b with
-    |Global id -> mksup (stack s) (b::(global s))
-    |Stack fid path pos ->
-
-
-Definition sup_incr(s:sup) := sup_add (fresh_block s) s.
+Definition sup_incr (s:sup):sup :=
+  let (pp,t') := next_block_stree (stack s) in
+  mksup t' (global s).
 
 Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
 
-Theorem sup_add_in : forall b s b', sup_In b' (sup_add b s) <-> b' = b \/ sup_In b' s.
+Theorem sup_incr_in : forall b s,
+    sup_In b (sup_incr s) <-> b = (fresh_block s) \/ sup_In b s.
 Proof.
-  split.
-  intros. destruct H. left. auto. right. auto.
-  intros. destruct H. left. auto. right. auto.
+  intros. unfold sup_In. destruct b.
+  - unfold sup_incr. unfold fresh_block.
+    destruct (next_block_stree) eqn:?. simpl.
+    destruct p1. destruct p1.
+    eapply next_block_stree_in in Heqp1.
+    split. intro. apply Heqp1 in H. destruct H.
+    inv H. auto. auto.
+    intro. apply Heqp1. destruct H.
+    inv H. auto. auto.
+  - unfold sup_incr. unfold fresh_block.
+    destruct (next_block_stree) eqn:?. simpl.
+    destruct p. destruct p. split.
+    auto. intros [H|H]. inv H. auto.
 Qed.
-Theorem sup_add_in1 : forall b s, sup_In b (sup_add b s).
-Proof. intros. apply sup_add_in. left. auto. Qed.
-Theorem sup_add_in2 : forall b s, sup_include s (sup_add b s).
-Proof. intros. intro. intro. apply sup_add_in. right. auto. Qed.
+
+Theorem sup_incr_in1 : forall s, sup_In (fresh_block s) (sup_incr s).
+Proof. intros. apply sup_incr_in. left. auto. Qed.
+Theorem sup_incr_in2 : forall s, sup_include s (sup_incr s).
+Proof. intros. intro. intro. apply sup_incr_in. right. auto. Qed.
 
 Lemma sup_include_refl : forall s:sup, sup_include s s.
 Proof. intro. intro. auto. Qed.
@@ -490,13 +502,13 @@ Proof.
 Qed.
 
 Lemma sup_include_incr:
-  forall s b, sup_include s (sup_add b s).
+  forall s, sup_include s (sup_incr s).
 Proof.
-  intros. apply sup_add_in2.
+  intros. apply sup_incr_in2.
 Qed.
 
 End Sup.
-
+*)
 Module Mem <: MEM.
 Include Sup.
 Local Notation "a # b" := (NMap.get _ b a) (at level 1).
@@ -809,12 +821,12 @@ Program Definition empty: mem :=
   infinite memory. *)
 Lemma mem_incr_1: forall m, sup_In (nextblock m) (sup_incr (m.(support))).
 Proof.
-  intros. unfold nextblock. unfold sup_incr. apply sup_add_in1.
+  intros. unfold nextblock. unfold sup_incr. apply sup_incr_in1.
 Qed.
 
 Lemma mem_incr_2: forall m b, sup_In b (m.(support)) -> sup_In b (sup_incr (m.(support))).
 Proof.
-  intros. unfold sup_incr. apply sup_add_in2. auto.
+  intros. unfold sup_incr. apply sup_incr_in2. auto.
 Qed.
 
 Program Definition alloc (m: mem) (lo hi: Z) :=
@@ -2216,7 +2228,7 @@ Theorem valid_block_alloc_inv:
 Proof.
   unfold valid_block; intros.
   rewrite support_alloc in H. rewrite alloc_result.
-  apply sup_add_in. auto.
+  apply sup_incr_in. auto.
 Qed.
 
 Theorem perm_alloc_1:
@@ -4763,7 +4775,7 @@ Theorem alloc_inject_neutral:
   forall s m lo hi b m',
   alloc m lo hi = (m', b) ->
   inject_neutral s m ->
-  sup_include (sup_add b (support m)) s ->
+  sup_include (sup_incr (support m)) s ->
   inject_neutral s m'.
 Proof.
   intros; red.
@@ -4774,7 +4786,8 @@ Proof.
   apply perm_implies with Freeable; auto with mem.
   eapply perm_alloc_2; eauto. lia.
   unfold flat_inj. apply pred_dec_true.
-  apply H1. apply sup_add_in1.
+  apply alloc_result in H. subst.
+  apply H1. apply sup_incr_in1.
 Qed.
 
 Theorem store_inject_neutral:
@@ -4964,7 +4977,7 @@ Lemma alloc_unchanged_on:
   unchanged_on m m'.
 Proof.
   intros; constructor; intros.
-- rewrite (support_alloc _ _ _ _ _ H). intro. intro. apply sup_add_in2. auto.
+- rewrite (support_alloc _ _ _ _ _ H). intro. intro. apply sup_incr_in2. auto.
 - split; intros.
   eapply perm_alloc_1; eauto.
   eapply perm_alloc_4; eauto.
@@ -5028,13 +5041,12 @@ Notation mem := Mem.mem.
 Notation sup := Mem.sup.
 Notation sup_In := Mem.sup_In.
 Notation sup_incr := Mem.sup_incr.
-Notation sup_add := Mem.sup_add.
 Notation sup_empty := Mem.sup_empty.
 Notation fresh_block := Mem.fresh_block.
 Notation freshness := Mem.freshness.
 Global Opaque Mem.alloc Mem.free Mem.store Mem.load Mem.storebytes Mem.loadbytes.
 
-Hint Resolve Mem.sup_add_in1 Mem.sup_add_in2 : core.
+Hint Resolve Mem.sup_incr_in1 Mem.sup_incr_in2 : core.
 Hint Resolve
   Mem.valid_not_valid_diff
   Mem.perm_implies

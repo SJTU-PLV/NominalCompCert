@@ -305,7 +305,6 @@ Proof.
   inv ME; constructor. auto.
 (* sup_include *)
   rewrite SUPPORT. eapply Mem.sup_include_trans; eauto.
-  apply Mem.sup_include_incr.
 (* vars *)
   intros. rewrite PTree.gsspec. destruct (peq id0 id).
   (* the new var *)
@@ -320,10 +319,10 @@ Proof.
 
 (* bounded *)
   intros. rewrite PTree.gsspec in H. destruct (peq id0 id).
-  inv H. rewrite SUPPORT. split. apply Mem.sup_add_in1. auto.
+  inv H. rewrite SUPPORT. split. apply Mem.sup_incr_in1. auto.
   intro.  eapply freshness; eauto.
   exploit me_bounded0; eauto. rewrite SUPPORT. intros [A B].
-  split. apply Mem.sup_add_in2. auto. auto.
+  split. apply Mem.sup_incr_in2. auto. auto.
 (* inv *)
   intros. destruct (eq_block b (Mem.nextblock m1)).
   subst b. rewrite SAME in H; inv H. exists id; exists sz. apply PTree.gss.
@@ -481,7 +480,7 @@ Inductive match_callstack (f: meminj) (m: mem) (tm: mem):
   | mcs_cons:
       forall cenv tf e le te sp sps bes es cs bound tbound
         (BOUND: Mem.sup_include es bound)
-        (TBOUND: Mem.sup_include (sup_add sp sps) tbound)
+        (TBOUND: Mem.sup_include (sup_incr sps) tbound)
         (MTMP: match_temps f le te)
         (MENV: match_env f cenv e sp sps bes es)
         (BOUND: match_bounds e m)
@@ -517,6 +516,8 @@ Proof.
   inv H. constructor; intros; eauto.
   (* inductive case *)
   assert (Mem.sup_include bes es) by (eapply me_sup_include; eauto).
+  assert (sp = fresh_block sps) by (eapply me_sps; eauto).
+  subst sp.
   econstructor; eauto.
   eapply match_temps_invariant; eauto.
   eapply match_env_invariant; eauto.
@@ -525,8 +526,8 @@ Proof.
     exploit me_bounded; eauto. intros [A B]. auto.
   eapply padding_freeable_invariant; eauto.
   eapply IHmatch_callstack; eauto.
-    intros. eapply H2; eauto. apply TBOUND. apply Mem.sup_add_in2. auto.
-    intros. eapply H4; eauto. apply TBOUND. apply Mem.sup_add_in2. auto.
+    intros. eapply H2; eauto. apply TBOUND. apply Mem.sup_incr_in2. auto.
+    intros. eapply H4; eauto. apply TBOUND. apply Mem.sup_incr_in2. auto.
 Qed.
 
 Lemma match_callstack_incr_bound:
@@ -646,6 +647,8 @@ Proof.
   intro EQ. exploit SEPARATED; eauto. intros [A B]. elim B. red.
   eapply Mem.sup_include_trans; eauto. apply Mem.sup_include_refl.
 (* inductive case *)
+  assert (sp = fresh_block sps) by (eapply me_sps; eauto).
+  subst sp.
   constructor. auto. auto.
   eapply match_temps_invariant; eauto.
   eapply match_env_invariant; eauto.
@@ -665,7 +668,7 @@ Proof.
   intros [A B]. apply H0,BOUND. auto.
   (* padding-freeable *)
   red; intros.
-  destruct (is_reachable_from_env_dec f1 e sp ofs).
+  destruct (is_reachable_from_env_dec f1 e (fresh_block sps) ofs).
   inv H3. right. apply is_reachable_intro with id b sz delta; auto.
   exploit PERM; eauto. intros [A|A]; try contradiction.
   left. eapply Mem.perm_unchanged_on; eauto.

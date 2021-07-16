@@ -740,8 +740,8 @@ Proof.
 - econstructor; eauto.
   apply IHmatch_stacks.
   intros. exploit H1; eauto. intros [A B]. split.
-  intro. apply A. apply BELOW. apply Mem.sup_add_in2. auto.
-  intro. apply B. apply TBELOW. apply Mem.sup_add_in2. auto.
+  intro. apply A. apply BELOW. apply Mem.sup_incr_in2. auto.
+  intro. apply B. apply TBELOW. apply Mem.sup_incr_in2. auto.
   apply regset_inject_incr with j; auto.
 Qed.
 
@@ -886,7 +886,7 @@ Proof.
   destruct IHlist_forall2 as (vl' & C & D); eauto using in_or_app.
   exists (v1' :: vl'); split; constructor; auto.
 Qed.
-Locate step.
+
 Theorem step_simulation:
   forall S1 t S2, step ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'),
@@ -956,9 +956,9 @@ Proof.
   econstructor; split. eapply exec_Icall; eauto.
   econstructor; eauto.
   econstructor; eauto.
-  intro. intro. apply Mem.sup_add_in in H1. destruct H1.
+  intro. intro. apply Mem.sup_incr_in in H1. destruct H1.
   change (Mem.valid_block m b). subst b. eapply Mem.valid_block_inject_1;eauto. apply SUPINC; auto.
-  intro. intro. apply Mem.sup_add_in in H1. destruct H1.
+  intro. intro. apply Mem.sup_incr_in in H1. destruct H1.
   change (Mem.valid_block tm b). subst b. eapply Mem.valid_block_inject_2;eauto. apply TSUPINC; auto.
   apply regs_inject; auto.
 
@@ -1033,8 +1033,8 @@ Proof.
   eapply exec_function_internal; eauto.
   eapply match_states_regular with (j := j'); eauto.
   apply init_regs_inject; auto. apply val_inject_list_incr with j; auto.
-  rewrite Mem.support_alloc with m 0 (fn_stacksize f) m' stk. apply Mem.sup_add_in2. auto. auto.
-  rewrite Mem.support_alloc with tm 0 (fn_stacksize f) tm' tstk. apply Mem.sup_add_in2. auto.
+  rewrite Mem.support_alloc with m 0 (fn_stacksize f) m' stk. apply Mem.sup_incr_in2. auto. auto.
+  rewrite Mem.support_alloc with tm 0 (fn_stacksize f) tm' tstk. apply Mem.sup_incr_in2. auto.
 
 - (* external function *)
   exploit external_call_inject; eauto.
@@ -1052,8 +1052,8 @@ Proof.
   inv STACKS. econstructor; split.
   eapply exec_return.
   econstructor; eauto. apply set_reg_inject; auto.
-  intro. intro. apply BELOW. apply Mem.sup_add_in2. auto.
-  intro. intro. apply TBELOW. apply Mem.sup_add_in2. auto.
+  intro. intro. apply BELOW. apply Mem.sup_incr_in2. auto.
+  intro. intro. apply TBELOW. apply Mem.sup_incr_in2. auto.
 Qed.
 
 (** Relating initial memory states *)

@@ -1156,17 +1156,17 @@ Proof.
 - assert (sup_In sp bound') by eauto with va.
   eapply sound_stack_public_call; eauto. apply IHsound_stack; intros.
   apply INV.
-  eapply Mem.sup_include_trans. eauto. auto. apply Mem.sup_add_in2. auto.
+  eapply Mem.sup_include_trans. eauto. auto. apply Mem.sup_incr_in2. auto.
   rewrite SAME; auto with ordered_type.
-  apply SINCR. apply Mem.sup_add_in2.  auto.
+  apply SINCR. apply Mem.sup_incr_in2.  auto.
   intro. subst b. assert(~ sup_In (fresh_block sps) sps) by apply freshness.
   congruence.
   auto. auto.
 - assert (sup_In sp bound') by eauto with va.
   eapply sound_stack_private_call; eauto. apply IHsound_stack; intros.
   apply INV.
-  eapply Mem.sup_include_trans. apply SINCR. auto. apply Mem.sup_add_in2. auto.
-  rewrite SAME; auto with ordered_type. apply SINCR. apply Mem.sup_add_in2. auto.
+  eapply Mem.sup_include_trans. apply SINCR. auto. apply Mem.sup_incr_in2. auto.
+  rewrite SAME; auto with ordered_type. apply SINCR. apply Mem.sup_incr_in2. auto.
   intro. subst b. assert(~ sup_In (fresh_block sps) sps) by apply freshness. congruence.
   auto. auto.
   apply bmatch_ext with m; auto.
@@ -1387,10 +1387,10 @@ Proof.
   apply set_builtin_res_sound; auto.
   apply sound_stack_exten with bc.
   apply sound_stack_inv with m. auto.
-  intros. apply Q. red. apply SINCR. apply Mem.sup_add_in2. auto.
+  intros. apply Q. red. apply SINCR. apply Mem.sup_incr_in2. auto.
   rewrite C; auto with ordered_type. intro. rewrite H7 in H4.
   eapply freshness. eauto.
-  intros. apply AA. apply SINCR. apply Mem.sup_add_in2. auto.
+  intros. apply AA. apply SINCR. apply Mem.sup_incr_in2. auto.
 * (* public builtin call *)
   exploit anonymize_stack; eauto.
   intros (bc1 & A & B & C & D & E & F & G).
@@ -1410,10 +1410,10 @@ Proof.
   apply set_builtin_res_sound; auto.
   apply sound_stack_exten with bc.
   apply sound_stack_inv with m. auto.
-  intros. apply Q. red. apply SINCR. apply Mem.sup_add_in2. auto.
+  intros. apply Q. red. apply SINCR. apply Mem.sup_incr_in2. auto.
   rewrite C; auto with ordered_type. intro. rewrite H5 in H2.
   eapply freshness; eauto.
-  intros. apply AA. apply SINCR. apply Mem.sup_add_in2. auto.
+  intros. apply AA. apply SINCR. apply Mem.sup_incr_in2. auto.
   }
   unfold transfer_builtin in TR.
   destruct ef; auto.
@@ -1496,7 +1496,7 @@ Proof.
   apply sound_stack_exten with bc.
   eapply sound_stack_free; eauto.
   intros. apply C. intro. rewrite H2 in H1. eapply freshness. eauto.
-  intro. intro. apply SINCR. apply Mem.sup_add_in2. auto.
+  intro. intro. apply SINCR. apply Mem.sup_incr_in2. auto.
 (*  eapply mmatch_below; eauto with va. *)
   destruct or; simpl. eapply D; eauto. constructor.
   eapply romatch_free; eauto.
@@ -1537,7 +1537,7 @@ Proof.
    eapply sound_regular_state with (bc := bc1); eauto.
    eapply Mem.sup_include_trans; eauto.
    apply sound_stack_exten with bc'; auto.
-   intros. apply G. apply SINCR. apply Mem.sup_add_in2. auto.
+   intros. apply G. apply SINCR. apply Mem.sup_incr_in2. auto.
    eapply ematch_ge; eauto. apply ematch_update. auto. auto.
   + (* from private call *)
    exploit return_from_private_call; eauto.
@@ -1547,7 +1547,7 @@ Proof.
    eapply sound_regular_state with (bc := bc1); eauto.
    eapply Mem.sup_include_trans; eauto.
    apply sound_stack_exten with bc'; auto.
-   intros. apply G. apply SINCR. apply Mem.sup_add_in2. auto.
+   intros. apply G. apply SINCR. apply Mem.sup_incr_in2. auto.
    eapply ematch_ge; eauto. apply ematch_update. auto. auto.
 Qed.
 
