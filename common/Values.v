@@ -28,16 +28,65 @@ Parameter eq_block : forall (x y:block),{x=y}+{x<>y}.
 
 End BLOCK.
 
-(* Declare Module Block : BLOCK. *)
+Definition path := list nat.
+
+Definition fid := option ident. (*None means external function*)
+
+Lemma nat_eq: forall n1 n2 :nat, {n1=n2} + {n1<>n2}.
+Proof.
+  intros.
+  destruct (Nat.eqb n1 n2) eqn:?.
+  apply Nat.eqb_eq in Heqb. left. auto.
+  apply Nat.eqb_neq in Heqb. right. auto.
+Qed.
+
+Lemma beq : forall b1 b2:bool, {b1=b2}+{b1<>b2}.
+Proof.
+  intros.
+  destruct (eqb b1 b2) eqn:?.
+  rewrite eqb_true_iff in Heqb. auto.
+  rewrite eqb_false_iff in Heqb. auto.
+Qed.
+
+Definition eq_path := list_eq_dec nat_eq.
+
+Definition fid_eq : forall fi1 fi2 : fid, {fi1=fi2} + {fi1<>fi2}.
+Proof.
+  intros.
+  destruct fi1; destruct fi2.
+  + destruct (peq i i0). left. congruence. right. congruence.
+  + right. congruence.
+  + right. congruence.
+  + left. congruence.
+Qed.
+
+Inductive block' :=
+  |Stack : fid -> path -> positive -> block'
+  |Global : ident -> block'.
 
 Module Block <: BLOCK.
-Definition block := positive.
-Definition eq_block := peq.
+
+Definition block := block'.
+
+Theorem eq_block : forall (x y:block),{x=y}+{x<>y}.
+Proof.
+  intros. destruct x; destruct y; try(right; congruence).
+  - (destruct (eq_path p p1)); try (right; congruence).
+    destruct (peq p0 p2); try (right; congruence).
+    destruct (fid_eq f f0). left. congruence. right. congruence.
+  - destruct (peq i i0). left. congruence. right. congruence.
+Qed.
+
 End Block.
 
 Definition block := Block.block.
 Definition eq_block := Block.eq_block.
 
+Definition is_stack (b:block) : bool :=
+  match b with
+    | Stack _ _ _ => true
+    |  _ => false
+  end.
 
 (** A value is either:
 - a machine integer;
