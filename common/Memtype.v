@@ -98,14 +98,19 @@ Parameter freshness : forall s, ~sup_In (fresh_block s) s.
 
 (*
 Parameter sup_add : block -> sup -> sup.
+
 Definition sup_incr(s:sup) := sup_add (fresh_block s) s.
+
+Parameter sup_add_in : forall b b' s, sup_In b (sup_add b' s) <-> b = b' \/ sup_In b s.
 *)
 
 Parameter sup_incr : sup -> sup.
 
-Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
+Definition sup_include(s1 s2:sup) :=
+ forall b, sup_In b s1 -> sup_In b s2.
 
-Parameter sup_incr_in : forall b s, sup_In b (sup_incr s) <-> b = (fresh_block s) \/ sup_In b s.
+Parameter sup_incr_in : forall b s, sup_In b (sup_incr s) <->
+ b = (fresh_block s) \/ sup_In b s.
 
 Theorem sup_incr_in1 : forall s, sup_In (fresh_block s) (sup_incr s).
 Proof. intros. apply sup_incr_in. left. auto. Qed.
