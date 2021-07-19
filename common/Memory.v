@@ -118,32 +118,39 @@ Parameter fresh_block : sup -> block.
 Parameter freshness : forall s, ~sup_In (fresh_block s) s.
 *)
 
-Fixpoint find_max_pos (l: list positive) : positive :=
+Definition block_pos (b:block) : positive :=
+  match b with
+  |Global id => id
+  |Stack fid path pos => pos
+  end.
+
+Fixpoint find_max_pos (l: list block) : positive :=
   match l with
   |nil => 1
   |hd::tl => let m' := find_max_pos tl in
-             match plt hd m' with
+            let phd := block_pos hd in
+             match plt phd m' with
              |left _ => m'
-             |right _ => hd
+             |right _ => phd
              end
   end.
 
-Theorem Lessthan: forall p l, In p l -> Ple p (find_max_pos l).
+Theorem Lessthan: forall b l, In b l -> Ple (block_pos b) (find_max_pos l).
 Proof.
   intros.
   induction l.
   destruct H.
   destruct H;simpl.
-  - destruct (plt a (find_max_pos l)); subst a.
+  - destruct (plt (block_pos a) (find_max_pos l)); subst a.
     + apply Plt_Ple. assumption.
     + apply Ple_refl.
-  - destruct (plt a (find_max_pos l)); apply IHl in H.
+  - destruct (plt (block_pos a) (find_max_pos l)); apply IHl in H.
     + auto.
     + eapply Ple_trans. eauto.  apply Pos.le_nlt. apply n.
 Qed.
 
+Definition fresh_block (s:sup) := Global (Pos.succ (find_max_pos s)).
 
-Definition fresh_block (s:sup) := Pos.succ (find_max_pos s).
 Theorem freshness : forall s, ~sup_In (fresh_block s) s.
 Proof.
   intros. unfold fresh_block.
